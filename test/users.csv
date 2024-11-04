@@ -1,0 +1,21 @@
+uid,first_name,last_name,age,city,email,phone_number
+A1B2C3D4,John,Smith,25,New York,john.smith@email.com,(123) 456-7890
+E5F6G7H8,Sarah,Johnson,30,Los Angeles,sarah.j@email.com,(234) 567-8901
+I9J0K1L2,James,Williams,28,Chicago,james.w@email.com,(345) 678-9012
+M3N4O5P6,Michael,Brown,35,Houston,michael.b@email.com,(456) 789-0123
+Q7R8S9T0,Emily,Davis,22,Phoenix,emily.d@email.com,(567) 890-1234
+U1V2W3X4,David,Wilson,29,Philadelphia,david.w@email.com,(678) 901-2345
+Y5Z6A7B8,Emma,Martinez,26,San Antonio,emma.m@email.com,(789) 012-3456
+C9D0E1F2,Daniel,Anderson,31,Dallas,daniel.a@email.com,(890) 123-4567
+G3H4I5J6,Olivia,Thomas,24,San Diego,olivia.t@email.com,(901) 234-5678
+K7L8M9N0,Ava,Taylor,27,Austin,ava.t@email.com,(012) 345-6789
+P1Q2R3S4,Noah,Lee,32,Jacksonville,noah.l@email.com,(123) 456-7891
+T5U6V7W8,Mia,Harris,29,Fort Worth,mia.h@email.com,(234) 567-8902
+X9Y0Z1A2,Ethan,Clark,33,Columbus,ethan.c@email.com,(345) 678-9013
+B3C4D5E6,Sophia,Lewis,23,San Francisco,sophia.l@email.com,(456) 789-0124
+F7G8H9I0,Benjamin,Walker,27,Charlotte,benjamin.w@email.com,(567) 890-1235
+J1K2L3M4,Amelia,Hall,26,Indianapolis,amelia.h@email.com,(678) 901-2346
+N5O6P7Q8,Lucas,Allen,28,Seattle,lucas.a@email.com,(789) 012-3457
+R9S0T1U2,Harper,Young,31,Denver,harper.y@email.com,(890) 123-4568
+V3W4X5Y6,Mason,King,34,Washington,mason.k@email.com,(901) 234-5679
+Z7A8B9C0,Ella,Wright,25,Boston,ella.w@email.com,(012) 345-6780
