@@ -2414,7 +2414,7 @@ def endpoints(athost):
 # sprint('◉ start server @ [{}]'.format(start_time))
 start_time = datetime.datetime.now()
 sprint('◉ start server @ [{}]'.format(start_time))
-for endpoint in endpoints(parsed.host): sprint(f'◉ http://{endpoint}:{parsed.port}')
+for endpoint in endpoints(args.host): sprint(f'◉ http://{endpoint}:{args.port}')
 serve(app, # https://docs.pylonsproject.org/projects/waitress/en/stable/runner.html
     host = args.host,          
     port = args.port,          
