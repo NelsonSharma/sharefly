@@ -1,10 +1,12 @@
-### sharefly
+## ShareFly
 
 Flask based web app for sharing files and quiz evaluation
 
+## Quickstart
+
 ### Installation
 
-Install the the sharefly module along with its requirements
+Install the the `sharefly` module along with its requirements
 
 ```bash
 python -m pip install Flask Flask-WTF waitress nbconvert sharefly
@@ -43,12 +45,4 @@ options:
 
 """
 ```
-
-### Configure Server
-
-* Not all configurations are available through the command line arguments. 
-* Majority of the configuration are read from config file named `configs.py` located on inside the work directory that was specified by the `--dir` option while starting the server. 
-* The config file can be created and modified by users. 
-* If the config file is not found inside the work directory while starting the server, it will be created automatically inside the work directory with the default settings.
-* The work directory is refered by the global variable `WORKDIR` in the source code.
 

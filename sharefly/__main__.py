@@ -1,18 +1,48 @@
-__doc__="""
-sharefly - a flask-based web app for sharing files.
+__doc__=f""" 
+-------------------------------------------------------------
+ShareFly - Flask-based web app for sharing files 
+-------------------------------------------------------------
+DEFAULT_ACCESS:
+D   Read from Downloads
+A   Read from Store
+B   Access Board
+U   Perform Upload
+S   Read from Self Uploads
+R   Read from Reports
++   Admin access enabled
+X   Reset access enabled (password reset)
+-   Not included in submission
 """
 
 
 #-----------------------------------------------------------------------------------------
-# NOTE: Checking run instance
-#-----------------------------------------------------------------------------------------
 from sys import exit
 if __name__!='__main__': exit(f'[!] can not import {__name__}.{__file__}')
 #-----------------------------------------------------------------------------------------
-#-----------------------------------------------------------------------------------------
-# NOTE: Imports
-#-----------------------------------------------------------------------------------------
-import os, argparse, getpass, logging, importlib.util
+import argparse
+# ------------------------------------------------------------------------------------------
+# args parsing
+# ------------------------------------------------------------------------------------------
+parser = argparse.ArgumentParser()
+parser.add_argument('--dir', type=str, default='', help="path of workspace directory")
+parser.add_argument('--verbose', type=int, default=2, help="verbose level in logging")
+
+parser.add_argument('--log', type=str, default='', help="path of log dir - keep blank to disable logging")
+parser.add_argument('--logpre', type=str, default='', help="adds this to the start of logfile name (works when logging is enabled)")
+parser.add_argument('--logname', type=str, default='%Y_%m_%d_%H_%M_%S_%f', help="name of logfile as formated string (works when logging is enabled)")
+parser.add_argument('--logpost', type=str, default='', help="adds this to the end of logfile name (works when logging is enabled)")
+
+parser.add_argument('--con', type=str, default='', help="config name - if not provided, uses 'default'")
+parser.add_argument('--reg', type=str, default='', help="if specified, allow users to register with specified access string such as DABU or DABUS+")
+parser.add_argument('--cos', type=int, default=1, help="use 1 to create-on-start - create (overwrites) pages")
+parser.add_argument('--coe', type=int, default=0, help="use 1 to clean-on-exit - deletes pages")
+
+parser.add_argument('--access', type=str, default='', help="if specified, allow users to add access string such as DABU or DABUS+")
+parsed = parser.parse_args()
+# ------------------------------------------------------------------------------------------
+# imports
+# ------------------------------------------------------------------------------------------
+import os, re, getpass, random, logging, importlib.util
 from math import inf
 import datetime
 def fnow(format): return datetime.datetime.strftime(datetime.datetime.now(), format)
@@ -25,35 +55,24 @@ try:
     from waitress import serve
 except: exit(f'[!] The required Flask packages missing:\tFlask>=3.0.2, Flask-WTF>=1.2.1\twaitress>=3.0.0\n  ⇒ pip install Flask Flask-WTF waitress')
 # ------------------------------------------------------------------------------------------
+
 # ------------------------------------------------------------------------------------------
-# NOTE: args parsing
+
+
 # ------------------------------------------------------------------------------------------
-parser = argparse.ArgumentParser()
-parser.add_argument('--dir', type=str, default='', help="path of workspace directory")
-parser.add_argument('--verbose', type=int, default=2, help="verbose level in logging")
-parser.add_argument('--log', type=str, default='', help="path of log file - keep blank to disable logging")
+LOGDIR = f'{parsed.log}'                               # define log dir - contains all logs
+LOGFILE = None
+if LOGDIR and parsed.verbose>0: 
 
+    LOGFILENAME = f'{parsed.logpre}{fnow(parsed.logname)}{parsed.logpost}'
+    if not LOGFILENAME: exit(f'[!] Provided logfile nameLogging directory was not found and could not be created is blank!')
 
-parser.add_argument('--reg', type=str, default='', help="if specified, allow users to register with specified access string such as DABU or DABUS+")
-parser.add_argument('--cos', type=int, default=1, help="use 1 to create-on-start - create (overwrites) pages")
-parser.add_argument('--coe', type=int, default=0, help="use 1 to clean-on-exit - deletes pages")
-
-# appends access
-parser.add_argument('--access', type=str, default='', help="if specified, allow users to append access string such as DABU or DABUS+ for this run only")
-
-# dont change below
-parser.add_argument('--config',  type=str, default='config', help="name of the config module")
-parser.add_argument('--configd', type=str, default='default', help="config dict name")
-
-parsed = parser.parse_args()
+    try: os.makedirs(LOGDIR, exist_ok=True)
+    except: exit(f'[!] Logging directory was not found and could not be created')
 # ------------------------------------------------------------------------------------------
-#-----------------------------------------------------------------------------------------
-# NOTE: Logfiles
-#-----------------------------------------------------------------------------------------
-LOGFILE = f'{parsed.log}'                               # define log dir - contains all logs
-if LOGFILE and parsed.verbose>0: 
     try:
         # Set up logging to a file
+        LOGFILE = os.path.join(LOGDIR, LOGFILENAME)
         logging.basicConfig(filename=LOGFILE, level=logging.INFO, format='%(asctime)s - %(message)s')
         # also output to the console
         console_handler = logging.StreamHandler()
@@ -64,8 +83,10 @@ if LOGFILE and parsed.verbose>0:
         logger.addHandler(console_handler)
     except: exit(f'[!] Logging could not be setup at {LOGFILE}')
 # ------------------------------------------------------------------------------------------
+
+
 # ------------------------------------------------------------------------------------------
-# NOTE: verbose levels
+# verbose level
 # ------------------------------------------------------------------------------------------
 if parsed.verbose==0: # no log
     def sprint(msg): pass
@@ -95,64 +116,258 @@ elif parsed.verbose>=2: # server and user logs
             exit()
 else: raise ZeroDivisionError # impossible
 # ------------------------------------------------------------------------------------------
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#-----------------------------------------------------------------------------------------
-# NOTE: Start
-#-----------------------------------------------------------------------------------------
-PYDIR = os.path.dirname(__file__) # script directory of __main__.py
+CWDIR = os.path.abspath(os.getcwd())    # location of run
 sprint(f'Starting...')
-sprint(f'↪ Module @ {PYDIR}')
+
 sprint(f'↪ Logging @ {LOGFILE}')
 
-
-#-----------------------------------------------------------------------------------------
-# NOTE: Check if workdir exists
-#-----------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------
 WORKDIR = f'{parsed.dir}'                               # define working dir - contains all bases
 if not WORKDIR: WORKDIR = os.getcwd()                   # if still not specified, set as getcwd
 try: os.makedirs(WORKDIR, exist_ok=True)
 except: fexit(f'[!] Workspace directory was not found and could not be created')
 sprint(f'↪ Workspace directory is {WORKDIR}')
 #-----------------------------------------------------------------------------------------
-# ==> read configurations from the workdir
+# ==> read configurations
 #-----------------------------------------------------------------------------------------
-CONFIG = parsed.configd if parsed.configd else 'default' # the config-dict to read from
-CONFIG_MODULE = parsed.config if parsed.config else None  # the name of configs module
-if CONFIG_MODULE is None: fexit(f'[!] Config moudule name was not specified')
+CONFIG = parsed.con if parsed.con else 'default' # the config-dict to read from
+CONFIG_MODULE = 'configs'  # the name of configs module
 CONFIGS_FILE = f'{CONFIG_MODULE}.py' # the name of configs file
+
+CSV_DELIM=','
+SSV_DELIM='\n'
+MAX_STR_LEN=50
+CSV_DTYPE=f'U{MAX_STR_LEN*2}'
+
+LOGIN_ORD = ['ADMIN','UID','NAME','PASS']
+SUBMIT_ORD = ['UID', 'NAME', 'SCORE', 'REMARK', 'BY']
+
+DEFAULT_USER = 'admin'
+DEFAULT_ACCESS = f'DABUSR+-'
+
+
+#-----------------------------------------------------------------------------------------
+
+#-----------------------------------------------------------------------------------------
+# password policy
+#-----------------------------------------------------------------------------------------
+def VALIDATE_PASS(instr):   # a function that can validate the password - returns bool type
+    try: assert (len(instr) < MAX_STR_LEN) and bool(re.fullmatch("(\w|@|\.)+", instr)) # alpha_numeric @.
+    except AssertionError: return False
+    return True
+#-----------------------------------------------------------------------------------------
+# uid policy
+def VALIDATE_UID(instr):   # a function that can validate the uid - returns bool type
+    try: assert (len(instr) < MAX_STR_LEN) and bool(re.fullmatch("(\w)+", instr)) # alpha_numeric 
+    except AssertionError: return False
+    return True
+#-----------------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------
+# name policy
+def VALIDATE_NAME(instr): return  (len(instr) >0) and (len(instr) < MAX_STR_LEN) and bool(re.fullmatch("((\w)(\w|\s)*(\w))|(\w)", instr)) # alpha-neumeric but no illegal spaces before or after
+#-----------------------------------------------------------------------------------------
+
+# this is useful for docker
+# we try to read args from os env variables
+def DEFAULT_CONFIG_GENERATE(): return """
+
+def merged(a:dict, b:dict): return {**a, **b}
+
+default = dict(    
+
+    # -------------------------------------# general info
+    topic        = "ShareFly",               # topic text (main banner text)
+    welcome      = "Welcome!",             # msg shown on login page
+    register     = "Register!",            # msg shown on register (new-user) page
+    emoji        = "🦋",                    # emoji shown of login page and seperates uid - name
+    rename       = 0,                      # if rename=1, allows users to update their names when logging in
+    case         = 0,                      # case-sentivity level in uid
+                                            #   (if case=0 uids are not converted           when matching in database)
+                                            #   (if case>0 uids are converted to upper-case when matching in database)
+                                            #   (if case<0 uids are converted to lower-case when matching in database)
+    
+    # -------------------------------------# validation
+    ext          = "",                     # csv list of file-extensions that are allowed to be uploaded e.g., ext = "jpg,jpeg,png,txt" (keep blank to allow all extensions)
+    required     = "",                     # csv list of file-names that are required to be uploaded e.g., required = "a.pdf,b.png,c.exe" (keep blank to allow all file-names)
+    maxupcount   = -1,                     # maximum number of files that can be uploaded by a user (keep -1 for no limit and 0 to disable uploading)
+    maxupsize    = "40GB",                 # maximum size of uploaded file (html_body_size)
+    
+    # -------------------------------------# server config
+    maxconnect   = 50,                     # maximum number of connections allowed to the server
+    threads      = 4,                      # no. of threads used by waitress server
+    port         = "8888",                 # port
+    host         = "0.0.0.0",              # ip
+
+    # ------------------------------------# file and directory information
+    base 		 = "__base__",            # the base directory 
+    html         = "__html__",            # flask html
+    secret       = "__secret__.txt",      # flask app secret
+    login        = "__login__.csv",       # login database
+    submit       = "__submit__.csv",      # submission database - created if not existing - reloads if exists
+    uploads      = "__uploads__",         # uploads folder (uploaded files by users go here)
+    reports      = "__reports__",         # reports folder (personal user access files by users go here)
+    downloads    = "__downloads__",       # downloads folder
+    store        = "__store__",           # store folder
+    board        = "__board__.ipynb",     # board file
+    hidden_store    = 0,                     # If True, shows hidden files in stores
+    hidden_user     = 1,                     # If True, shows hidden files in user-stores
+    # --------------------------------------# style dict
+    style        = dict(                   
+                        # -------------# labels
+                        downloads_ =    'Downloads',
+                        uploads_ =      'Uploads',
+                        store_ =        'Store',
+                        board_=         'Board',
+                        admin_=         'Admin',
+                        logout_=        'Logout',
+                        login_=         'Login',
+                        new_=           'Register',
+                        submit_=        'Eval',
+                        resetpass_=     'Reset',
+                        report_=        'Report',
+
+                        # -------------# icons 
+                        icon_board =    '🔰',
+                        icon_admin=     '⭐',
+                        icon_login=     '🔒',
+                        icon_new=       '👤',
+                        icon_home=      '🔘',
+                        icon_downloads= '📥',
+                        icon_uploads=   '📤',
+                        icon_store=     '📦',
+                        icon_submit=    '✴️',
+                        icon_report=    '📜',
+
+                        # -------------# admin actions 
+                        aa_ref_downloads =  '📥',
+                        aa_db_write=     	'💾',
+                        aa_db_read=       	'👁️‍🗨️',
+                        aa_ref_board=      	'🔰',
+                        aa_reset_pass= 		'🔑',
+
+                        # -------------# board style ('lab'  'classic' 'reveal')
+                        template_board = 'lab', 
+                    )
+    )
+
+""" 
+
+
+def DEFAULT_CONFIG_WRITE(file_path):
+    with open(file_path, 'w', encoding='utf-8') as f: f.write(DEFAULT_CONFIG_GENERATE())
+
+
+
+def DICT2CSV(path, d, ord):
+    with open(path, 'w', encoding='utf-8') as f: 
+        f.write(CSV_DELIM.join(ord)+SSV_DELIM)
+        for v in d.values(): f.write(CSV_DELIM.join(v)+SSV_DELIM)
+
+APPEND_ACCESS = f'{parsed.access}'.strip().upper()
+
+def CSV2DICT(path, key_at):
+    with open(path, 'r', encoding='utf-8') as f: 
+        s = f.read()
+        lines = s.split(SSV_DELIM)
+        d = dict()
+        for line in lines[1:]:
+            if line:
+                cells = line.split(CSV_DELIM)
+                d[f'{cells[key_at]}'] = cells
+        return d
+
+def GET_SECRET_KEY(postfix):
+    randx = lambda : random.randint(1111111111, 9999999999)
+    r1 = randx()
+    for _ in range(datetime.datetime.now().second): _ = randx()
+    r2 = randx()
+    for _ in range(datetime.datetime.now().second): _ = randx()
+    r3 = randx()
+    for _ in range(datetime.datetime.now().second): _ = randx()
+    r4 = randx()
+    return ':{}:{}:{}:{}:{}:'.format(r1,r2,r3,r4,postfix)
+
+
+def GET_VALID_RE_PATTERN(validext):
+    if not validext: return ".+"
+    pattern=""
+    for e in validext: pattern+=f'{e}|'
+    return pattern[:-1]
+
+
+def CREATE_LOGIN_FILE(login_xl_path):  
+    this_user = getpass.getuser()
+    if not (VALIDATE_UID(this_user)):  this_user=DEFAULT_USER
+    DICT2CSV(login_xl_path, { f'{this_user}' : [DEFAULT_ACCESS,  f'{this_user}', f'{this_user}', f''] }, LOGIN_ORD ) # save updated login information to csv
+    return this_user
+
+
+def READ_DB_FROM_DISK(path, key_at):
+    try:    return CSV2DICT(path, key_at), True
+    except: return dict(), False
+# ------------------------------------------------------------------------------------------
+def WRITE_DB_TO_DISK(path, db_frame, ord): # will change the order
+    try:
+        DICT2CSV(path, db_frame, ord) # save updated login information to csv
+        return True
+    except PermissionError:
+        return False
+    
+
+
+def GET_FILE_LIST (d): 
+    dlist = []
+    for f in os.listdir(d):
+        p = os.path.join(d, f)
+        if os.path.isfile(p): dlist.append(f)
+    return sorted(dlist)
+
+
+def DISPLAY_SIZE_READABLE(mus):
+    # find max upload size in appropiate units
+    mus_kb = mus/(2**10)
+    if len(f'{int(mus_kb)}') < 4:
+        mus_display = f'{mus_kb:.2f} KB'
+    else:
+        mus_mb = mus/(2**20)
+        if len(f'{int(mus_mb)}') < 4:
+            mus_display = f'{mus_mb:.2f} MB'
+        else:
+            mus_gb = mus/(2**30)
+            if len(f'{int(mus_gb)}') < 4:
+                mus_display = f'{mus_gb:.2f} GB'
+            else:
+                mus_tb = mus/(2**40)
+                mus_display = f'{mus_tb:.2f} TB'
+    return mus_display
+
+
+def NEW_NOTEBOOK_STR(title, nbformat=4, nbformat_minor=2):
+    return '{"cells": [{"cell_type": "markdown","metadata": {},"source": [ "'+str(title)+'" ] } ], "metadata": { }, "nbformat": '+str(nbformat)+', "nbformat_minor": '+str(nbformat_minor)+'}'
+
+
+#-----------------------------------------------------------------------------------------
+# Special Objects
+#-----------------------------------------------------------------------------------------
+class Fake:
+    def __len__(self): return len(self.__dict__)
+    def __init__(self, **kwargs) -> None:
+        for name, attribute in kwargs.items():  setattr(self, name, attribute)
+#-----------------------------------------------------------------------------------------
+
+# ******************************************************************************************
+
+
+
+
 #-----------------------------------------------------------------------------------------
 # try to import configs
 # inside the WORKDIR there should be 'configs.py' file
 # check if 'configs.py` exsists or not`
-#-----------------------------------------------------------------------------------------
 CONFIGS_FILE_PATH = os.path.join(WORKDIR, CONFIGS_FILE) # should exsist under workdir
 if not os.path.isfile(CONFIGS_FILE_PATH):
     sprint(f'↪ Creating default config "{CONFIGS_FILE}" ...')
-    # create default config
-    with open(CONFIGS_FILE_PATH, 'w') as fw: 
-        with open(os.path.join(PYDIR, 'config.py'), 'r') as fr: 
-            fw.write(fr.read())
+    DEFAULT_CONFIG_WRITE(CONFIGS_FILE_PATH)
 try: 
     # Load the module from the specified file path
     c_spec = importlib.util.spec_from_file_location(CONFIG_MODULE, CONFIGS_FILE_PATH)
@@ -171,7 +386,6 @@ if not isinstance(config_dict, dict):
     except: pass
 if not isinstance(config_dict, dict): raise fexit(f'Expecting a dict object for config')
 
-from . import Fake
 try: 
     sprint(f'↪ Building config from {CONFIG_MODULE}.{CONFIG}')
     args = Fake(**config_dict)
@@ -179,13 +393,51 @@ except: fexit(f'[!] Could not read config')
 if not len(args): fexit(f'[!] Empty or Invalid config provided')
 # ******************************************************************************************
 
+
+    
 # Read base dir first 
 BASEDIR = os.path.abspath(((os.path.join(WORKDIR, args.base)) if args.base else WORKDIR))
 try:     os.makedirs(BASEDIR, exist_ok=True)
 except:  fexit(f'[!] base directory  @ {BASEDIR} was not found and could not be created') 
 sprint(f'⚙ Base dicectiry: {BASEDIR}')
+# ------------------------------------------------------------------------------------------
+# WEB-SERVER INFORMATION
+# ------------------------------------------------------------------------------------------\
+if not args.secret: 
+    APP_SECRET_KEY =  GET_SECRET_KEY(fnow("%Y%m%d%H%M%S"))
+    sprint(f'⇒ secret not provided - using random secret')
+else:
+    APP_SECRET_KEY_FILE = os.path.join(BASEDIR, args.secret)
+    if not os.path.isfile(APP_SECRET_KEY_FILE): #< --- if key dont exist, create it
+        APP_SECRET_KEY =  GET_SECRET_KEY(fnow("%Y%m%d%H%M%S"))
+        try:
+            with open(APP_SECRET_KEY_FILE, 'w') as f: f.write(APP_SECRET_KEY) #<---- auto-generated key
+        except: fexit(f'[!] could not create secret key @ {APP_SECRET_KEY_FILE}')
+        sprint(f'⇒ New secret created: {APP_SECRET_KEY_FILE}')
+    else:
+        try:
+            with open(APP_SECRET_KEY_FILE, 'r') as f: APP_SECRET_KEY = f.read()
+            sprint(f'⇒ Loaded secret file: {APP_SECRET_KEY_FILE}')
+        except: fexit(f'[!] could not read secret key @ {APP_SECRET_KEY_FILE}')
 
 
+# ------------------------------------------------------------------------------------------
+# LOGIN DATABASE - CSV
+# ------------------------------------------------------------------------------------------
+if not args.login: fexit(f'[!] login file was not provided!')    
+LOGIN_XL_PATH = os.path.join( BASEDIR, args.login) 
+if not os.path.isfile(LOGIN_XL_PATH): 
+    sprint(f'⇒ Creating new login file: {LOGIN_XL_PATH}')
+    this_user = CREATE_LOGIN_FILE(LOGIN_XL_PATH)
+    sprint(f'⇒ Created new login with user "{this_user}" at file: {LOGIN_XL_PATH}')
+
+# ------------------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------------------
+# SUBMIT DATABASE - CSV
+# ------------------------------------------------------------------------------------------
+if not args.submit: SUBMIT_XL_PATH = None # fexit(f'[!] submission file was not provided!')    
+else: SUBMIT_XL_PATH = os.path.join( BASEDIR, args.submit)
     
 
 # ------------------------------------------------------------------------------------------
@@ -198,6 +450,15 @@ DOWNLOAD_FOLDER_PATH = os.path.join( BASEDIR, args.downloads)
 try: os.makedirs(DOWNLOAD_FOLDER_PATH, exist_ok=True)
 except: fexit(f'[!] downloads folder @ {DOWNLOAD_FOLDER_PATH} was not found and could not be created')
 sprint(f'⚙ Download Folder: {DOWNLOAD_FOLDER_PATH}') 
+# ------------------------------------------------------------------------------------------
+# store settings
+# ------------------------------------------------------------------------------------------
+if not args.store: fexit(f'[!] store folder was not provided!')
+STORE_FOLDER_PATH = os.path.join( BASEDIR, args.store) 
+try: os.makedirs(STORE_FOLDER_PATH, exist_ok=True)
+except: fexit(f'[!] store folder @ {STORE_FOLDER_PATH} was not found and could not be created')
+sprint(f'⚙ Store Folder: {STORE_FOLDER_PATH}')
+
 
 # ------------------------------------------------------------------------------------------
 # upload settings
@@ -218,53 +479,1223 @@ except: fexit(f'[!] reports folder @ {REPORT_FOLDER_PATH} was not found and coul
 sprint(f'⚙ Reports Folder: {REPORT_FOLDER_PATH}')
 
 
-APPEND_ACCESS = f'{parsed.access}'.strip().upper()
-from . import FileValidator, str2bytes, DISPLAY_SIZE_READABLE
-FV=FileValidator(args.ext, args.required)
 
 
+
+
+
+
+
+
+ALLOWED_EXTENSIONS = set([x.strip() for x in args.ext.split(',') if x])  # a set or list of file extensions that are allowed to be uploaded 
+if '' in ALLOWED_EXTENSIONS: ALLOWED_EXTENSIONS.remove('')
+VALID_FILES_PATTERN = GET_VALID_RE_PATTERN(ALLOWED_EXTENSIONS)
+REQUIRED_FILES = set([x.strip() for x in args.required.split(',') if x])  # a set or list of file extensions that are required to be uploaded 
+if '' in REQUIRED_FILES: REQUIRED_FILES.remove('')
+def VALIDATE_FILENAME(filename):   # a function that checks for valid file extensions based on ALLOWED_EXTENSIONS
+    if '.' in filename: 
+        name, ext = filename.rsplit('.', 1)
+        safename = f'{name}.{ext.lower()}'
+        if REQUIRED_FILES:  isvalid = (safename in REQUIRED_FILES)
+        else:               isvalid = bool(re.fullmatch(f'.+\.({VALID_FILES_PATTERN})$', safename))
+    else:               
+        name, ext = filename, ''
+        safename = f'{name}'
+        if REQUIRED_FILES:  isvalid = (safename in REQUIRED_FILES)
+        else:               isvalid = (not ALLOWED_EXTENSIONS)
+    return isvalid, safename
+
+def str2bytes(size):
+    sizes = dict(KB=2**10, MB=2**20, GB=2**30, TB=2**40)
+    return int(float(size[:-2])*sizes.get(size[-2:].upper(), 0))
 MAX_UPLOAD_SIZE = str2bytes(args.maxupsize)     # maximum upload file size 
 MAX_UPLOAD_COUNT = ( inf if args.maxupcount<0 else args.maxupcount )       # maximum number of files that can be uploaded by one user
 INITIAL_UPLOAD_STATUS = []           # a list of notes to be displayed to the users about uploading files
-if FV.REQUIRED_FILES: INITIAL_UPLOAD_STATUS.append((-1, f'accepted files [{len(FV.REQUIRED_FILES)}]: {FV.REQUIRED_FILES}'))
+if REQUIRED_FILES: INITIAL_UPLOAD_STATUS.append((-1, f'accepted files [{len(REQUIRED_FILES)}]: {REQUIRED_FILES}'))
 else:
-    if FV.ALLOWED_EXTENSIONS:  INITIAL_UPLOAD_STATUS.append((-1, f'allowed extensions [{len(FV.ALLOWED_EXTENSIONS)}]: {FV.ALLOWED_EXTENSIONS}'))
+    if ALLOWED_EXTENSIONS:  INITIAL_UPLOAD_STATUS.append((-1, f'allowed extensions [{len(ALLOWED_EXTENSIONS)}]: {ALLOWED_EXTENSIONS}'))
 INITIAL_UPLOAD_STATUS.append((-1, f'max upload size: {DISPLAY_SIZE_READABLE(MAX_UPLOAD_SIZE)}'))
 if not (MAX_UPLOAD_COUNT is inf): INITIAL_UPLOAD_STATUS.append((-1, f'max upload count: {MAX_UPLOAD_COUNT}'))
 sprint(f'⚙ Upload Settings ({len(INITIAL_UPLOAD_STATUS)})')
 for s in INITIAL_UPLOAD_STATUS: sprint(f' ⇒ {s[1]}')
 # ------------------------------------------------------------------------------------------
 
-# ------------------------------------------------------------------------------------------
-# WEB-SERVER INFORMATION
-# ------------------------------------------------------------------------------------------\
-from . import GET_SECRET_KEY
-APP_SECRET_KEY =  GET_SECRET_KEY()
-
-
-TEMPLATES_DIR, STATIC_DIR = os.path.join(PYDIR, "templates"), os.path.join(PYDIR, "static")
-if parsed.cos:
-    from .pages import make_pages
-    sprint(f'↪ Creating html/css templates @ {PYDIR}')
-    make_pages(args.style, TEMPLATES_DIR, STATIC_DIR)
-    sprint(f'↪ Created html/css templates @ {PYDIR}')
-
-
-
 
 # ------------------------------------------------------------------------------------------
-from . import NEW_NOTEBOOK_STR
+# html pages
+# ------------------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------
+# Create HTML
+# ------------------------------------------------------------------------------------------
+style = getattr(args, 'style')
+CAPTION_DOWNLOADS =     style['downloads_']
+CAPTION_UPLOADS =       style['uploads_'] 
+CAPTION_STORE =         style['store_']  
+CAPTION_BOARD =         style['board_'] 
+CAPTION_ADMIN =         style['admin_'] 
+CAPTION_LOGOUT =        style['logout_'] 
+CAPTION_LOGIN =         style['login_'] 
+CAPTION_NEW =           style['new_'] 
+CAPTION_SUBMIT =        style['submit_'] 
+CAPTION_RESET_PASS =    style['resetpass_'] 
+CAPTION_REPORT =        style['report_'] 
+
+ICON_BOARD =            style['icon_board'] 
+ICON_ADMIN =            style['icon_admin'] 
+ICON_LOGIN =            style['icon_login'] 
+ICON_NEW =              style['icon_new'] 
+ICON_HOME =             style['icon_home'] 
+ICON_DOWNLOADS =        style['icon_downloads'] 
+ICON_UPLOADS =          style['icon_uploads'] 
+ICON_STORE =            style['icon_store'] 
+ICON_SUBMIT =           style['icon_submit'] 
+ICON_REPORT =           style['icon_report'] 
+
+AA_REFD=                style['aa_ref_downloads'] 
+AA_DBW=                 style['aa_db_write']
+AA_DBR=                 style['aa_db_read']
+AA_REFB=                style['aa_ref_board']
+AA_RESETPASS=           style['aa_reset_pass']
+
+
+TEMPLATE_BOARD =        style['template_board'] 
+
+
+# ******************************************************************************************
+HTML_TEMPLATES = dict(
+# ******************************************************************************************
+board="""""",
+# ******************************************************************************************
+submit = """
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title> """+f'{ICON_SUBMIT}'+""" {{ config.topic }} </title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">  
+    </head>
+    <body>
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+
+    <div align="left" style="padding: 20px;">
+        <div class="topic_mid">{{ config.topic }}</div>
+        <div class="userword">{{session.uid}} {{ session.emojid }} {{session.named}}</div>
+        <br>
+        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{CAPTION_LOGOUT}'+"""</a>
+        <a href="{{ url_for('route_home') }}" class="btn_back">Back</a>
+        <a href="{{ url_for('route_submit') }}" class="btn_refresh">Refresh</a>
+        <a href="{{ url_for('route_storeuser') }}" class="btn_store">User-Store</a>
+        <br>
+        <br>
+        {% if success %}
+        <span class="admin_mid" style="animation-name: fader_admin_success;">✓ {{ status }} </span>
+        {% else %}
+        <span class="admin_mid" style="animation-name: fader_admin_failed;">✗ {{ status }} </span>
+        {% endif %}
+        <br>
+
+        
+        <br>
+
+        <form action="{{ url_for('route_submit') }}" method="post">
+            <input id="uid" name="uid" type="text" placeholder="uid" class="txt_submit"/>
+            <br>
+            <br>
+            <input id="score" name="score" type="text" placeholder="score" class="txt_submit"/> 
+            <br>
+            <br>
+            <input id="remark" name="remark" type="text" placeholder="remarks" class="txt_submit"/>
+            <br>
+            <br>
+            <input type="submit" class="btn_submit" value="Submit Evaluation"> 
+            <br>
+        </form>
+        <br>
+        <br>
+        <form action="{{ url_for('route_submit') }}" method="post">
+            <input id="resetpass" name="resetpass" type="text" style="width:100px;color: #9a0808; background: rgb(255, 171, 171)" placeholder="uid" class="txt_submit"/>
+            <input type="submit" class="btn_purge_large" value="Reset Password"> 
+        </form>        
+    </div>
+
+            
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+    </body>
+</html>
+""",
+# ******************************************************************************************
+admin = """
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title> """+f'{ICON_ADMIN}'+""" {{ config.topic }} | {{ session.uid }} </title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">					 
+    </head>
+    <body>
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+    
+    <div align="left" style="padding: 20px;">
+        <div class="topic_mid">{{ config.topic }}</div>
+        <div class="userword">{{session.uid}} {{ session.emojid }} {{session.named}}</div>
+        <br>
+        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{CAPTION_LOGOUT}'+"""</a>
+        <a href="{{ url_for('route_home') }}" class="btn_back">Back</a>
+        <a href="{{ url_for('route_adminpage') }}" class="btn_refresh">Refresh</a>
+        <br>
+        <br>
+        {% if success %}
+        <span class="admin_mid" style="animation-name: fader_admin_success;">✓ {{ status }} </span>
+        {% else %}
+        <span class="admin_mid" style="animation-name: fader_admin_failed;">✗ {{ status }} </span>
+        {% endif %}
+        <br>
+        <br>
+        {% if '+' in session.admind %}
+        <a href="{{ url_for('route_adminpage',req_cmd='ref_downloads') }}" class="btn_admin_actions">"""+f'{AA_REFD}'+"""<span class="tooltiptext">Refresh Downloads</span></a> <!--Update download-list --!>
+        <a href="{{ url_for('route_adminpage',req_cmd='db_write') }}" class="btn_admin_actions">"""+f'{AA_DBW}'+"""<span class="tooltiptext">Persist Database</span></a> <!--Persist login-database --!>
+        <a href="{{ url_for('route_adminpage',req_cmd='db_read') }}" class="btn_admin_actions">"""+f'{AA_DBR}'+"""<span class="tooltiptext">Reload Database</span></a> <!--Reload login-database --!>
+        <a href="{{ url_for('route_adminpage',req_cmd='ref_board') }}" class="btn_admin_actions">"""+f'{AA_REFB}'+"""<span class="tooltiptext">Refresh Board</span></a> <!--Refresh board --!>
+        <button class="btn_admin_actions" onclick="confirm_repass()">"""+f'{AA_RESETPASS}'+"""<span class="tooltiptext">Reset Password</span></button>
+        
+            <script>
+                function confirm_repass() {
+                let res = prompt("Enter UID", ""); 
+                if (res != null) {
+                    location.href = "{{ url_for('route_repass',req_uid='::::') }}".replace("::::", res);
+                    }
+                }
+            </script>
+        {% endif %}
+    </div>
+            
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+    </body>
+</html>
+""",
+# ******************************************************************************************
+login = """
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title> """+f'{ICON_LOGIN}'+""" {{ config.topic }} </title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">  
+    </head>
+    <body>
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+
+    <div align="center">
+        <br>
+        <div class="topic">{{ config.topic }}</div>
+        <br>
+        <br>
+        <form action="{{ url_for('route_login') }}" method="post">
+            <br>
+            <div style="font-size: x-large;">{{ warn }}</div>
+            <br>
+            <div class="msg_login">{{ msg }}</div>
+            <br>
+            <input id="uid" name="uid" type="text" placeholder="... user-id ..." class="txt_login"/>
+            <br>
+            <br>
+            <input id="passwd" name="passwd" type="password" placeholder="... password ..." class="txt_login"/>
+            <br>
+            <br>
+            {% if config.rename>0 %}
+            <input id="named" name="named" type="text" placeholder="... update-name ..." class="txt_login"/>
+            {% if config.rename>1 %}
+            <input id="emojid" name="emojid" type="text" placeholder={{ config.emoji }} class="txt_login_small"/>
+            {% endif %}
+            <br>
+            {% endif %}
+            <br>
+            <input type="submit" class="btn_login" value=""" +f'"{CAPTION_LOGIN}"'+ """> 
+            <br>
+            <br>
+        </form>
+    </div>
+
+    <!-- ---------------------------------------------------------->
+    
+    <div align="center">
+    <div>
+    <span style="font-size: xx-large;">{{ config.emoji }}</span>
+    <br>
+    {% if config.reg %}
+    <a href="{{ url_for('route_new') }}" class="btn_board">""" + f'{CAPTION_NEW}' +"""</a>
+    {% endif %}
+    </div>
+    <!-- <a href="https://emojipicker.com/" target="_blank" class="btn_login">...</a> -->
+    <!--<div style="font-size:large"><a href="https://github.com/NelsonSharma/topics"  target="_blank"> 📤 📥 </a></div>-->
+    <br>
+    </div>
+    <!-- ---------------------------------------------------------->
+    </body>
+</html>
+""",
+# ******************************************************************************************
+new = """
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title> """+f'{ICON_NEW}'+""" {{ config.topic }} </title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">  
+    </head>
+    <body>
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+
+    <div align="center">
+        <br>
+        <div class="topic">{{ config.topic }}</div>
+        <br>
+        <br>
+        <form action="{{ url_for('route_new') }}" method="post">
+            <br>
+            <div style="font-size: x-large;">{{ warn }}</div>
+            <br>
+            <div class="msg_login">{{ msg }}</div>
+            <br>
+            <input id="uid" name="uid" type="text" placeholder="... user-id ..." class="txt_login"/>
+            <br>
+            <br>
+            <input id="passwd" name="passwd" type="password" placeholder="... password ..." class="txt_login"/>
+            <br>
+            <br>
+            <input id="named" name="named" type="text" placeholder="... name ..." class="txt_login"/>
+            <br>
+            <br>
+            <input type="submit" class="btn_board" value=""" + f'"{CAPTION_NEW}"' +"""> 
+            <br>
+            <br>
+            
+        </form>
+    </div>
+
+    <!-- ---------------------------------------------------------->
+    
+    <div align="center">
+    <div>
+    <span style="font-size: xx-large;">{{ config.emoji }}</span>
+    <br>
+    <a href="{{ url_for('route_login') }}" class="btn_login">""" + f'{CAPTION_LOGIN}' +"""</a>
+    
+    </div>
+    <!-- <a href="https://emojipicker.com/" target="_blank" class="btn_login">...</a> -->
+    <!--<div style="font-size:large"><a href="https://github.com/NelsonSharma/topics"  target="_blank"> 📤 📥 </a></div>-->
+    <br>
+    </div>
+    <!-- ---------------------------------------------------------->
+    </body>
+</html>
+""",
+# ******************************************************************************************
+downloads = """
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title> """+f'{ICON_DOWNLOADS}'+""" {{ config.topic }} | {{ session.uid }} </title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">           
+    </head>
+    <body>
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+    
+    <div align="left" style="padding: 20px;">
+        <div class="topic_mid">{{ config.topic }}</div>
+        <div class="userword">{{session.uid}} {{ session.emojid }} {{session.named}}</div>
+        <br>
+        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{CAPTION_LOGOUT}'+"""</a>
+        <a href="{{ url_for('route_home') }}" class="btn_back">Back</a>
+        <br>
+        <br>
+        <div class="files_status">"""+f'{CAPTION_DOWNLOADS}'+"""</div>
+        <br>
+        <div class="files_list_down">
+            <ol>
+            {% for file in config.dfl %}
+            <li><a href="{{ (request.path + '/' if request.path != '/' else '') + file }}" style="text-decoration: none; color: rgb(20, 20, 20);" >{{ file }}</a></li>
+            <br>
+            {% endfor %}
+            </ol>
+        </div>
+        <br>
+        <br>
+    </div>
+
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+    </body>
+</html>
+""",
+# ******************************************************************************************
+storeuser = """
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title> """+f'{ICON_STORE}'+""" {{ config.topic }} | {{ session.uid }} </title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">           
+    </head>
+    <body>
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+    
+    <div align="left" style="padding: 20px;">
+        <div class="topic_mid">{{ config.topic }}</div>
+        <div class="userword">{{session.uid}} {{ session.emojid }} {{session.named}}</div>
+        <br>
+        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{CAPTION_LOGOUT}'+"""</a>
+        <a href="{{ url_for('route_submit') }}" class="btn_back">Back</a>
+        <br>
+        <br>
+        <!-- Breadcrumb for navigation -->
+        <div class="files_status"> Path: 
+            {% if subpath %}
+                <a href="{{ url_for('route_storeuser') }}" class="btn_store">{{ config.storeusername }}</a>{% for part in subpath.split('/') %}🔹<a href="{{ url_for('route_storeuser', subpath='/'.join(subpath.split('/')[:loop.index])) }}" class="btn_store">{{ part }}</a>{% endfor %}  
+            {% else %}
+                <a href="{{ url_for('route_storeuser') }}" class="btn_store">{{ config.storeusername }}</a>
+            {% endif %}
+        </div>
+        <hr>
+        <!-- Directory Listing -->
+        
+        <div class="files_list_up">
+            <p class="files_status">Folders</p>
+            {% for dir in dirs %}
+            <a href="{{ url_for('route_storeuser', subpath=subpath + '/' + dir) }}" class="btn_board">{{ dir }}</a>
+            {% endfor %}
+        </div>
+        <hr>
+        
+        <div class="files_list_down">
+            <p class="files_status">Files</p>
+            <ol>
+            {% for file in files %}
+            <li>
+            <a href="{{ url_for('route_storeuser', subpath=subpath + '/' + file, get='') }}" class="btn_store_actions">⬇️</a> 
+            <a href="{{ url_for('route_storeuser', subpath=subpath + '/' + file) }}" target="_blank" class="btn_store_actions">{{ file }}</a>
+            {% if file.lower().endswith('.ipynb') %}
+            <a href="{{ url_for('route_storeuser', subpath=subpath + '/' + file, html='') }}" class="btn_store_actions">🌐</a> 
+            {% endif %}
+            </li>
+            
+            {% endfor %}
+            </ol>
+        </div>
+        <br>
+        <br>
+    </div>
+
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+    </body>
+</html>
+""",
+store = """
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title> """+f'{ICON_STORE}'+""" {{ config.topic }} | {{ session.uid }} </title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">           
+    </head>
+    <body>
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+    
+    <div align="left" style="padding: 20px;">
+        <div class="topic_mid">{{ config.topic }}</div>
+        <div class="userword">{{session.uid}} {{ session.emojid }} {{session.named}}</div>
+        <br>
+        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{CAPTION_LOGOUT}'+"""</a>
+        <a href="{{ url_for('route_home') }}" class="btn_back">Back</a>
+        <br>
+        <br>
+        <!-- Breadcrumb for navigation -->
+        <div class="files_status"> Path: 
+            {% if subpath %}
+                <a href="{{ url_for('route_store') }}" class="btn_store">{{ config.storename }}</a>{% for part in subpath.split('/') %}🔹<a href="{{ url_for('route_store', subpath='/'.join(subpath.split('/')[:loop.index])) }}" class="btn_store">{{ part }}</a>{% endfor %}  
+            {% else %}
+                <a href="{{ url_for('route_store') }}" class="btn_store">{{ config.storename }}</a>
+            {% endif %}
+        </div>
+        <hr>
+        <!-- Directory Listing -->
+        
+        <div class="files_list_up">
+            <p class="files_status">Folders</p>
+            {% for dir in dirs %}
+            <a href="{{ url_for('route_store', subpath=subpath + '/' + dir) }}" class="btn_board">{{ dir }}</a>
+            {% endfor %}
+        </div>
+        <hr>
+        
+        <div class="files_list_down">
+            <p class="files_status">Files</p>
+            <ol>
+            {% for file in files %}
+            <li>
+            <a href="{{ url_for('route_store', subpath=subpath + '/' + file, get='') }}" >⬇️</a> 
+            <a href="{{ url_for('route_store', subpath=subpath + '/' + file) }}" target="_blank">{{ file }}</a>
+            </li>
+            
+            {% endfor %}
+            </ol>
+        </div>
+        <br>
+        <br>
+    </div>
+
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+    </body>
+</html>
+""",
+# ******************************************************************************************
+uploads = """
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title> """+f'{ICON_UPLOADS}'+""" {{ config.topic }} | {{ session.uid }} </title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">           
+    </head>
+    <body>
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+    
+    <div align="left" style="padding: 20px;">
+        <div class="topic_mid">{{ config.topic }}</div>
+        <div class="userword">{{session.uid}} {{ session.emojid }} {{session.named}}</div>
+        <br>
+        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{CAPTION_LOGOUT}'+"""</a>
+        <a href="{{ url_for('route_home') }}" class="btn_back">Back</a>
+        <br>
+        <br>
+        <div class="files_status">"""+f'{CAPTION_UPLOADS}'+"""</div>
+        <br>
+        <div class="files_list_down">
+            <ol>
+            {% for file in session.filed %}
+            <li><a href="{{ (request.path + '/' if request.path != '/' else '') + file }}" style="text-decoration: none; color: rgb(20, 20, 20);" >{{ file }}</a></li>
+            <br>
+            {% endfor %}
+            </ol>
+        </div>
+        <br>
+        <br>
+    </div>
+
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+    </body>
+</html>
+""",
+# ******************************************************************************************
+reports = """
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title> """+f'{ICON_REPORT}'+""" {{ config.topic }} | {{ session.uid }} </title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">           
+    </head>
+    <body>
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+    
+    <div align="left" style="padding: 20px;">
+        <div class="topic_mid">{{ config.topic }}</div>
+        <div class="userword">{{session.uid}} {{ session.emojid }} {{session.named}}</div>
+        <br>
+        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{CAPTION_LOGOUT}'+"""</a>
+        <a href="{{ url_for('route_home') }}" class="btn_back">Back</a>
+        <br>
+        <br>
+        <div class="files_status">"""+f'{CAPTION_REPORT}'+"""</div>
+        <br>
+        <div class="files_list_down">
+            <ol>
+            {% for file in session.reported %}
+            <li><a href="{{ (request.path + '/' if request.path != '/' else '') + file }}"  target="_blank" style="text-decoration: none; color: rgb(20, 20, 20);" >{{ file }}</a></li>
+            <br>
+            {% endfor %}
+            </ol>
+        </div>
+        <br>
+        <br>
+    </div>
+
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+    </body>
+</html>
+""",
+# ******************************************************************************************
+home="""
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title> """+f'{ICON_HOME}'+""" {{ config.topic }} | {{ session.uid }} </title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">					 
+    </head>
+    <body>
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+    
+    <div align="left" style="padding: 20px;">
+        <div class="topic_mid">{{ config.topic }}</div>
+        <div class="userword">{{session.uid}} {{ session.emojid }} {{session.named}}</div>
+        <br>
+        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{CAPTION_LOGOUT}'+"""</a>
+        {% if "S" in session.admind %}
+        <a href="{{ url_for('route_uploads') }}" class="btn_upload">"""+f'{CAPTION_UPLOADS}'+"""</a>
+        {% endif %}
+        {% if "D" in session.admind %}
+        <a href="{{ url_for('route_downloads') }}" class="btn_download">"""+f'{CAPTION_DOWNLOADS}'+"""</a>
+        {% endif %}
+        {% if "A" in session.admind %}
+        <a href="{{ url_for('route_store') }}" class="btn_store">"""+f'{CAPTION_STORE}'+"""</a>
+        {% endif %}
+        {% if "B" in session.admind and config.board %}
+        <a href="{{ url_for('route_board') }}" class="btn_board" target="_blank">"""+f'{CAPTION_BOARD}'+"""</a>
+        {% endif %}
+        {% if 'X' in session.admind or '+' in session.admind %}
+        <a href="{{ url_for('route_submit') }}" class="btn_submit">"""+f'{CAPTION_SUBMIT}'+"""</a>
+        {% endif %}
+        {% if 'R' in session.admind %}
+        <a href="{{ url_for('route_reports') }}" class="btn_report">"""+f'{CAPTION_REPORT}'+"""</a>
+        {% endif %}
+        
+        {% if '+' in session.admind %}
+        <a href="{{ url_for('route_adminpage') }}" class="btn_admin">"""+f'{CAPTION_ADMIN}'+"""</a>
+        {% endif %}
+        <br>
+        <br>
+        {% if config.muc!=0 and "U" in session.admind %}
+                <div class="status">
+                    <ol>
+                    {% for s,f in status %}
+                    {% if s %}
+                    {% if s<0 %}
+                    <li style="color: #ffffff;">{{ f }}</li>
+                    {% else %}
+                    <li style="color: #47ff6f;">{{ f }}</li>
+                    {% endif %}
+                    {% else %}
+                    <li style="color: #ff6565;">{{ f }}</li>
+                    {% endif %}
+                    {% endfor %}
+                    </ol>
+                </div>
+                <br>
+                {% if submitted<1 %}
+                <form method='POST' enctype='multipart/form-data'>
+                    {{form.hidden_tag()}}
+                    {{form.file()}}
+                    {{form.submit()}}
+                </form>
+                {% else %}
+                <div class="upword">Your Score is <span style="color:seagreen;">{{ score }}</span>  </div>
+                {% endif %}
+                <br>
+                
+                <div> <span class="upword">Uploads</span> 
+                
+                {% if "U" in session.admind and submitted<1 %}
+                <a href="{{ url_for('route_uploadf') }}" class="btn_refresh_small">Refresh</a>
+                <button class="btn_purge" onclick="confirm_purge()">Purge</button>
+                <script>
+                    function confirm_purge() {
+                    let res = confirm("Purge all the uploaded files now?");
+                    if (res == true) {
+                        location.href = "{{ url_for('route_purge') }}";
+                        }
+                    }
+                </script>
+                {% endif %}
+                </div>
+                <br>
+
+                <div class="files_list_up">
+                    <ol>
+                    {% for f in session.filed %}
+                    <li>{{ f }}</li>
+                    {% endfor %}
+                    </ol>
+                </div>
+        {% endif %}
+        
+            
+    <!-- ---------------------------------------------------------->
+    </br>
+    <!-- ---------------------------------------------------------->
+    </body>
+</html>
+""",
+#******************************************************************************************
+
+# ******************************************************************************************
+)
+# ******************************************************************************************
+CSS_TEMPLATES = dict(
+# ****************************************************************************************** 0b7daa
+style = """
+
+#file {
+    border-style: solid;
+    border-radius: 10px;
+    font-family:monospace;
+    background-color: #232323;
+    border-color: #232323;
+    color: #FFFFFF;
+    font-size: small;
+}
+#submit {
+    padding: 2px 10px 2px;
+    background-color: #232323; 
+    color: #FFFFFF;
+    font-family:monospace;
+    font-weight: bold;
+    font-size: large;
+    border-style: solid;
+    border-radius: 10px;
+    border-color: #232323;
+    text-decoration: none;
+    font-size: small;
+}
+#submit:hover {
+  box-shadow: 0 12px 16px 0 rgba(0, 0, 0,0.24), 0 17px 50px 0 rgba(0, 0, 0,0.19);
+}
+
+
+.github_info {
+    padding: 2px 10px;
+    background-color: #516fa7; 
+    color: #ffffff;
+    font-size: medium;
+    font-weight: bold;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+
+.topic{
+    color: #000000;
+    font-size: xxx-large;
+    font-weight: bold;
+    font-family:monospace;    
+}
+
+
+.msg_login{
+    color: #060472; 
+    font-size: large;
+    font-weight: bold;
+    font-family:monospace;    
+    animation-duration: 3s; 
+    animation-name: fader_msg;
+}
+@keyframes fader_msg {from {color: #ffffff;} to {color: #060472; } }
+
+
+.txt_submit{
+
+    text-align: left;
+    font-family:monospace;
+    border: 1px;
+    background: rgb(218, 187, 255);
+    appearance: none;
+    position: relative;
+    border-radius: 3px;
+    padding: 5px 5px 5px 5px;
+    line-height: 1.5;
+    color: #8225c2;
+    font-size: 16px;
+    font-weight: 350;
+    height: 24px;
+}
+::placeholder {
+    color: #8225c2;
+    opacity: 1;
+    font-family:monospace;   
+}
+
+.txt_login{
+
+    text-align: center;
+    font-family:monospace;
+
+    box-shadow: inset #abacaf 0 0 0 2px;
+    border: 0;
+    background: rgba(0, 0, 0, 0);
+    appearance: none;
+    position: relative;
+    border-radius: 3px;
+    padding: 9px 12px;
+    line-height: 1.4;
+    color: rgb(0, 0, 0);
+    font-size: 16px;
+    font-weight: 400;
+    height: 40px;
+    transition: all .2s ease;
+    :hover{
+        box-shadow: 0 0 0 0 #fff inset, #1de9b6 0 0 0 2px;
+    }
+    :focus{
+        background: #fff;
+        outline: 0;
+        box-shadow: 0 0 0 0 #fff inset, #1de9b6 0 0 0 3px;
+    }
+}
+::placeholder {
+    color: #888686;
+    opacity: 1;
+    font-weight: bold;
+    font-style: oblique;
+    font-family:monospace;   
+}
+
+
+.txt_login_small{
+    box-shadow: inset #abacaf 0 0 0 2px;
+    text-align: center;
+    font-family:monospace;
+    border: 0;
+    background: rgba(0, 0, 0, 0);
+    appearance: none;
+    position: absolute;
+    border-radius: 3px;
+    padding: 9px 12px;
+    margin: 0px 0px 0px 4px;
+    line-height: 1.4;
+    color: rgb(0, 0, 0);
+    font-size: 16px;
+    font-weight: 400;
+    height: 40px;
+    width: 45px;
+    transition: all .2s ease;
+    :hover{
+        box-shadow: 0 0 0 0 #fff inset, #1de9b6 0 0 0 2px;
+    }
+    :focus{
+        background: #fff;
+        outline: 0;
+        box-shadow: 0 0 0 0 #fff inset, #1de9b6 0 0 0 3px;
+    }
+}
+
+.topic_mid{
+    color: #000000;
+    font-size: x-large;
+    font-style: italic;
+    font-weight: bold;
+    font-family:monospace;    
+}
+
+.userword{
+    color: #12103c;
+    font-weight: bold;
+    font-family:monospace;    
+    font-size: xxx-large;
+}
+
+
+.upword{
+    color: #12103c;
+    font-weight: bold;
+    font-family:monospace;    
+    font-size: xx-large;
+
+}
+
+.status{
+    padding: 10px 10px;
+    background-color: #232323; 
+    color: #ffffff;
+    font-size: medium;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+
+.files_status{
+    font-weight: bold;
+    font-size: x-large;
+    font-family:monospace;
+}
+
+.files_list_up{
+    padding: 10px 10px;
+    background-color: #ececec; 
+    color: #080000;
+    font-size: medium;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+.files_list_down{
+    padding: 10px 10px;
+    background-color: #ececec; 
+    color: #080000;
+    font-size: x-large;
+    font-weight: bold;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+
+.btn_logout {
+    padding: 2px 10px 2px;
+    background-color: #060472; 
+    color: #FFFFFF;
+    font-weight: bold;
+    font-size: large;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+
+.btn_refresh_small {
+    padding: 2px 10px 2px;
+    background-color: #6daa43; 
+    color: #FFFFFF;
+    font-size: small;
+    border-style: none;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+.btn_refresh {
+    padding: 2px 10px 2px;
+    background-color: #6daa43; 
+    color: #FFFFFF;
+    font-size: large;
+    font-weight: bold;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+.btn_purge {
+    padding: 2px 10px 2px;
+    background-color: #9a0808; 
+    border-style: none;
+    color: #FFFFFF;
+    font-size: small;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+.btn_purge_large {
+    padding: 2px 10px 2px;
+    background-color: #9a0808; 
+    border-style: none;
+    color: #FFFFFF;
+    font-size: large;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+.btn_submit {
+    padding: 2px 10px 2px;
+    background-color: #8225c2; 
+    border-style: none;
+    color: #FFFFFF;
+    font-weight: bold;
+    font-size: large;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+.btn_report {
+    padding: 2px 10px 2px;
+    background-color: #c23f79; 
+    border-style: none;
+    color: #FFFFFF;
+    font-weight: bold;
+    font-size: large;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+}
+.btn_admin {
+    padding: 2px 10px 2px;
+    background-color: #2b2b2b; 
+    border-style: none;
+    color: #FFFFFF;
+    font-weight: bold;
+    font-size: large;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+.btn_store_actions {
+    padding: 2px 2px 2px 2px;
+    background-color: #FFFFFF; 
+    border-style: solid;
+    border-width: thin;
+    border-color: #000000;
+    color: #000000;
+    font-weight: bold;
+    font-size: medium;
+    border-radius: 5px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+.btn_admin_actions {
+    padding: 2px 10px 2px;
+    background-color: #FFFFFF; 
+    border-style: solid;
+    border-width: medium;
+    border-color: #000000;
+    color: #000000;
+    font-weight: bold;
+    font-size: xxx-large;
+    border-radius: 5px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+
+.btn_admin_actions .tooltiptext {
+  visibility: hidden;
+
+  background-color: #000000;
+  color: #ffffff;
+  text-align: center;
+  font-size: large;
+  border-radius: 6px;
+  padding: 5px 15px 5px 15px;
+
+  position: absolute;
+  z-index: 1;
+}
+
+.btn_admin_actions:hover .tooltiptext {
+  visibility: visible;
+}
+
+
+
+.btn_board {
+    padding: 2px 10px 2px;
+    background-color: #934377; 
+    border-style: none;
+    color: #FFFFFF;
+    font-weight: bold;
+    font-size: large;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+
+.btn_login {
+    padding: 2px 10px 2px;
+    background-color: #060472; 
+    color: #FFFFFF;
+    font-weight: bold;
+    font-size: large;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+    border-style:  none;
+}
+
+.btn_download {
+    padding: 2px 10px 2px;
+    background-color: #089a28; 
+    color: #FFFFFF;
+    font-weight: bold;
+    font-size: large;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+.btn_store{
+    padding: 2px 10px 2px;
+    background-color: #10a58a; 
+    color: #FFFFFF;
+    font-weight: bold;
+    font-size: large;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+.btn_upload {
+    padding: 2px 10px 2px;
+    background-color: #0b7daa; 
+    color: #FFFFFF;
+    font-weight: bold;
+    font-size: large;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+.btn_back {
+    padding: 2px 10px 2px;
+    background-color: #a19636; 
+    color: #FFFFFF;
+    font-weight: bold;
+    font-size: large;
+    border-radius: 10px;
+    font-family:monospace;
+    text-decoration: none;
+}
+
+
+.admin_mid{
+    color: #000000; 
+    font-size: x-large;
+    font-weight: bold;
+    font-family:monospace;    
+    animation-duration: 10s;
+}
+@keyframes fader_admin_failed {from {color: #ff0000;} to {color: #000000; } }
+@keyframes fader_admin_success {from {color: #22ff00;} to {color: #000000; } }
+"""
+)
+# ******************************************************************************************
+
+#PYDIR = os.path.dirname(__file__) # script directory of __main__.py
+HTML_DIR = os.path.join(WORKDIR, args.html)
+
+#sprint(f'↪ Creating html/css templates @ {PYDIR}')
+
+os.makedirs(HTML_DIR, exist_ok=True)
+#sprint(f'↪ Creating html templates @ {TEMPLATES_DIR}')
+for k,v in HTML_TEMPLATES.items():
+    h = os.path.join(HTML_DIR, f"{k}.html")
+    if (not os.path.isfile(h)) or bool(parsed.cos):
+        #sprint(f'  ↦ page:{h}')
+        with open(h, 'w', encoding='utf-8') as f: f.write(v)
+
+#os.makedirs(STATIC_DIR, exist_ok=True)
+#sprint(f'↪ Creating css templates @ {STATIC_DIR}')
+for k,v in CSS_TEMPLATES.items():
+    h = os.path.join(HTML_DIR, f"{k}.css")
+    if (not os.path.isfile(h)) or bool(parsed.cos):
+        #sprint(f'  ↦ page:{h}')
+        with open(h, 'w', encoding='utf-8') as f: f.write(v)
+
+sprint(f'↪ Created html/css templates @ {HTML_DIR}')
+
+
+
+
+# ------------------------------------------------------------------------------------------
 BOARD_FILE_MD = None
 BOARD_PAGE = ""
 if args.board:
     try: 
         from nbconvert import HTMLExporter 
         has_nbconvert_package=True
+    
     except:
         sprint(f'[!] Board will not be enabled since it requires nbconvert>=7.16.2 which is missing\n  ⇒ pip install nbconvert')
         has_nbconvert_package = False
 
     if has_nbconvert_package:
+
+        def remove_tag(page, tag): # does not work on nested tags
+            fstart, fstop = f'<{tag}', f'/{tag}>'
+            while True:
+                istart = page.find(fstart)
+                if istart<0: break
+                istop = page[istart:].find(fstop)
+                page = f'{page[:istart]}{page[istart+istop+len(fstop):]}'
+            return page
+
+
+        STYLE_CSS = """<style type="text/css">
+
+        .btn_header {
+            background-color: #FFFFFF; 
+            margin: 0px 0px 0px 6px;
+            padding: 12px 6px 12px 6px;
+            border-style: solid;
+            border-width: thin;
+            border-color: #000000;
+            color: #000000;
+            font-weight: bold;
+            font-size: medium;
+            border-radius: 5px;
+        }
+
+        .btn_actions {
+            background-color: #FFFFFF; 
+            padding: 2px 2px 2px 2px;
+            margin: 5px 5px 5px 5px;
+            border-style: solid;
+            border-color: silver;
+            border-width: thin;
+            color: #000000;
+            font-weight: bold;
+            font-size: medium;
+            border-radius: 2px;
+
+        }
+        </style>
+        """
+
+        def nb2html(source_notebook, template_name='lab', no_script=True, html_title=None, parsed_title='Notebook',):
+            if html_title is None: # auto infer
+                html_title = os.path.basename(source_notebook)
+                iht = html_title.rfind('.')
+                if not iht<0: html_title = html_title[:iht]
+                if not html_title: html_title = (parsed_title if parsed_title else os.path.basename(os.path.dirname(source_notebook)))
+            try:    
+                page, _ = HTMLExporter(template_name=template_name).from_file(source_notebook,  dict(  metadata = dict( name = f'{html_title}' )    )) 
+                if no_script: page = remove_tag(page, 'script') # force removing any scripts
+            except: page = None
+
+            fstart = f'<body'
+            istart = page.find(fstart)
+            if istart<0: return None
+            page = f'{page[:istart]}{STYLE_CSS}{page[istart:]}'
+
+            fstart = f'</body'
+            istart = page.find(fstart)
+            if istart<0: return None
+            ins= f'<hr><br><div align="left"><a class="btn_actions" href="#">🔝</a></div>'
+            page = f'{page[:istart]}{ins}{page[istart:]}'
+
+
+            return  page
+
+
         BOARD_FILE_MD = os.path.join(BASEDIR, f'{args.board}')
         if  os.path.isfile(BOARD_FILE_MD): sprint(f'⚙ Board File: {BOARD_FILE_MD}')
         else: 
@@ -277,11 +1708,10 @@ if args.board:
                     sprint(f'⚙ Board File: {BOARD_FILE_MD} could not be created - Board will not be available!')
 
 if not BOARD_FILE_MD:   sprint(f'⚙ Board: Not Available')
-else:                   sprint(f'⚙ Board: Is Available')
+else: sprint(f'⚙ Board: Is Available')
 
-TEMPLATE_BOARD =        args.style['template_board']
-ICON_BOARD =            args.style['icon_board']
-CAPTION_BOARD =         args.style['board_'] 
+
+
 def update_board(): 
     global BOARD_PAGE
     res = False
@@ -304,25 +1734,7 @@ _ = update_board()
 
 
 # ------------------------------------------------------------------------------------------
-
-# ------------------------------------------------------------------------------------------
-# LOGIN DATABASE - CSV
-# ------------------------------------------------------------------------------------------
-if not args.login: fexit(f'[!] login file was not provided!')    
-LOGIN_XL_PATH = os.path.join( BASEDIR, args.login) 
-if not os.path.isfile(LOGIN_XL_PATH): 
-    from . access import build_new
-    sprint(f'⇒ Creating new login file: {LOGIN_XL_PATH}')
-    this_user, this_platform = build_new(LOGIN_XL_PATH)
-    sprint(f'⇒ Created new login with user "{this_user}", name "{this_platform}" at file: {LOGIN_XL_PATH}')
-
-# ------------------------------------------------------------------------------------------
-
-# ------------------------------------------------------------------------------------------
-# SUBMIT DATABASE - CSV
-# ------------------------------------------------------------------------------------------
-if not args.submit: SUBMIT_XL_PATH = None # fexit(f'[!] submission file was not provided!')    
-else: SUBMIT_XL_PATH = os.path.join( BASEDIR, args.submit)
+# validation
 # ------------------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------------------
 def read_logindb_from_disk():
@@ -366,29 +1778,39 @@ def GetUserFiles(uid):
     has_udir = os.path.isdir(udir)
     if has_udir: return not (False in [os.path.isfile(os.path.join(udir, f)) for f in REQUIRED_FILES])
     else: return False
- # The upload form using FlaskForm
-class UploadFileForm(FlaskForm): file, submit = MultipleFileField("File", validators=[InputRequired()]), SubmitField("Upload File")
 
 # ------------------------------------------------------------------------------------------
 # application setting and instance
 # ------------------------------------------------------------------------------------------
-app = Flask(__name__)
+
+app = Flask(
+    __name__,
+    static_folder=HTML_DIR,      # Set your custom static folder path here
+    template_folder=HTML_DIR,   # Set your custom templates folder path here
+)
+
 app.secret_key =          APP_SECRET_KEY
 app.config['base'] =      BASEDIR
 app.config['uploads'] =   UPLOAD_FOLDER_PATH
 app.config['reports'] =   REPORT_FOLDER_PATH
 app.config['downloads'] = DOWNLOAD_FOLDER_PATH
-app.config['archives'] =  ARCHIVE_FOLDER_PATH
+app.config['store'] =     STORE_FOLDER_PATH
+app.config['storename'] =  os.path.basename(STORE_FOLDER_PATH)
+app.config['storeuser'] =     UPLOAD_FOLDER_PATH
+app.config['storeusername'] =  os.path.basename(UPLOAD_FOLDER_PATH)
+app.config['hidden_store'] =     args.hidden_store
+app.config['hidden_user'] =     args.hidden_user
 app.config['emoji'] =     args.emoji
 app.config['topic'] =     args.topic
 app.config['dfl'] =       GET_FILE_LIST(DOWNLOAD_FOLDER_PATH)
-app.config['afl'] =       GET_FILE_LIST(ARCHIVE_FOLDER_PATH)
 app.config['rename'] =    int(args.rename)
 app.config['muc'] =       MAX_UPLOAD_COUNT
 app.config['board'] =     (BOARD_FILE_MD is not None)
 app.config['reg'] =       (parsed.reg)
 # ------------------------------------------------------------------------------------------
-
+class UploadFileForm(FlaskForm): # The upload form using FlaskForm
+    file = MultipleFileField("File", validators=[InputRequired()])
+    submit = SubmitField("Upload File")
 # ------------------------------------------------------------------------------------------
 
 #%% [4]
@@ -435,12 +1857,12 @@ def route_login():
            
                     else: # new password is invalid valid 
                         warn = LOGIN_NEW_TEXT
-                        msg=f'[{in_uid}] New password is invalid - can use alpha-numeric, underscore and @-symbol'
+                        msg=f'[{in_uid}] New password is invalid - can use any of the alphabets (A-Z, a-z), numbers (0-9), underscore (_), dot (.) and at-symbol (@) only'
                         
                                                
                 else: #new password not provided                
                     warn = LOGIN_NEW_TEXT
-                    msg = f'[{in_uid}] New password required - can use alpha-numeric, underscore and @-symbol'
+                    msg = f'[{in_uid}] New password required - can use any of the alphabets (A-Z, a-z), numbers (0-9), underscore (_), dot (.) and at-symbol (@) only'
                                            
             else: # re login
                 if in_passwd: # password provided 
@@ -531,12 +1953,12 @@ def route_new():
             
                         else: # new password is invalid valid  
                             warn = LOGIN_NEW_TEXT
-                            msg=f'[{in_uid}] New password is invalid - can use alpha-numeric, underscore and @-symbol'
+                            msg=f'[{in_uid}] New password is invalid - can use any of the alphabets (A-Z, a-z), numbers (0-9), underscore (_), dot (.) and at-symbol (@) only'
                             
                                                 
                     else: #new password not provided                  
                         warn = LOGIN_NEW_TEXT
-                        msg = f'[{in_uid}] New password required - can use alpha-numeric, underscore and @-symbol'
+                        msg = f'[{in_uid}] New password required - can use any of the alphabets (A-Z, a-z), numbers (0-9), underscore (_), dot (.) and at-symbol (@) only'
                                             
 
             else:
@@ -577,23 +1999,6 @@ def route_board():
 
 # ------------------------------------------------------------------------------------------
 
-# ------------------------------------------------------------------------------------------
-# archive
-# ------------------------------------------------------------------------------------------
-@app.route('/archives', methods =['GET'], defaults={'req_path': ''})
-@app.route('/archives/<path:req_path>')
-def route_archives(req_path):
-    if not session.get('has_login', False): return redirect(url_for('route_login'))
-    if not 'A' in session['admind']: return redirect(url_for('route_home'))
-    abs_path = os.path.join(app.config['archives'], req_path) # Joining the base and the requested path
-    if not os.path.exists(abs_path): 
-        dprint(f"⇒ requested file was not found {abs_path}") #Return 404 if path doesn't exist
-        return abort(404) 
-    if os.path.isfile(abs_path):  #(f"◦ sending file ")
-        dprint(f'● {session["uid"]} ◦ {session["named"]} just downloaded the file {req_path} via {request.remote_addr}')
-        return send_file(abs_path) # Check if path is a file and serve
-    return render_template('archives.html')
-# ------------------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------------------
 # download
@@ -712,18 +2117,16 @@ def route_submit():
                                             status, success = f'User [{in_uid}] {named} has not uploaded the required files yet.', False
 
                                 else:
-                                    #if scored[-1] == submitter or ('+' in session['admind']):
-                                    if in_score:  dbsub[in_query][2] = in_score
-                                    if in_remark: dbsub[in_query][3] = in_remark
-                                    if in_score or in_remark : status, success =    f'Score/Remark Updated for [{in_uid}] {named}, current score is {dbsub[in_query][2]}. Remark is [{dbsub[in_query][3]}].', True
-                                    #else: status, success =                         f'Nothing was updated for [{in_uid}] {named}, current score is {dbsub[in_query][2]}. Remark is [{dbsub[in_query][3]}].', False
-                                    upby = f' [forced from {scored[-1]}]' if scored[-1] == submitter else ''
-                                    dprint(f"▶ {submitter} ◦ {session['named']} updated{upby} the evaluation for {uid} ◦ {named} via {request.remote_addr}")
-
-                                    # (already evaluated by [{scored[-1]}]) 
-                                    #else:
-                                    #status, success = f'[{in_uid}] {named} has been evaluated by [{scored[-1]}], you cannot update the information.', False
-                                    
+                                    if scored[-1] == submitter or abs(float(scored[2])) == float('inf') or ('+' in session['admind']):
+                                        if in_score:  dbsub[in_query][2] = in_score
+                                        if in_remark: dbsub[in_query][3] = in_remark
+                                        dbsub[in_query][-1] = submitter # incase of inf score
+                                        if in_score or in_remark : status, success =    f'Score/Remark Updated for [{in_uid}] {named}, current score is {dbsub[in_query][2]}. Remark is [{dbsub[in_query][3]}].', True
+                                        else: status, success =                         f'Nothing was updated for [{in_uid}] {named}, current score is {dbsub[in_query][2]}. Remark is [{dbsub[in_query][3]}].', False
+                                        dprint(f"▶ {submitter} ◦ {session['named']} updated the evaluation for {uid} ◦ {named} via {request.remote_addr}")
+                                    else:
+                                        status, success = f'[{in_uid}] {named} has been evaluated by [{scored[-1]}], you cannot update the information. Hint: Set the score to "inf".', False
+                                        dprint(f"▶ {submitter} ◦ {session['named']} is trying to revaluate {uid} ◦ {named} (already evaluated by [{scored[-1]}]) via {request.remote_addr}")
                 
                 else: status, success =  "You are not allow to evaluate.", False
             else: status, success =  "Evaluation is disabled.", False
@@ -743,8 +2146,6 @@ def route_submit():
 # ------------------------------------------------------------------------------------------
 # home - upload
 # ------------------------------------------------------------------------------------------
-
-
 @app.route('/home', methods =['GET', 'POST'])
 def route_home():
     if not session.get('has_login', False): return redirect(url_for('route_login'))
@@ -844,7 +2245,65 @@ def route_purge():
     return redirect(url_for('route_home'))
 # ------------------------------------------------------------------------------------------
 
- 
+@app.route('/store', methods =['GET'])
+@app.route('/store/', methods =['GET'])
+@app.route('/store/<path:subpath>', methods =['GET'])
+def route_store(subpath=""):
+    if not session.get('has_login', False): return redirect(url_for('route_login'))
+    if ('A' not in session['admind']) :  return abort(404)
+    abs_path = os.path.join(app.config['store'], subpath)
+    if not os.path.exists(abs_path): return abort(404)
+        
+    if os.path.isdir(abs_path):
+
+        items = os.listdir(abs_path)
+        if app.config['hidden_store']: items = [item for item in items if not item.startswith('.')]
+        #items = [item for item in items if not item.startswith('.')]
+        dirs = [item for item in items if os.path.isdir(os.path.join(abs_path, item))]
+        files = [item for item in items if os.path.isfile(os.path.join(abs_path, item))]
+        return render_template('store.html', dirs=dirs, files=files, subpath=subpath, )
+    elif os.path.isfile(abs_path): 
+        dprint(f"● {session['uid']} ◦ {session['named']}  downloaded {abs_path} via {request.remote_addr}")
+        return send_file(abs_path, as_attachment=("get" in request.args))
+    else: return abort(404)
+
+
+@app.route('/storeuser', methods =['GET'])
+@app.route('/storeuser/', methods =['GET'])
+@app.route('/storeuser/<path:subpath>', methods =['GET'])
+def route_storeuser(subpath=""):
+    if not session.get('has_login', False): return redirect(url_for('route_login'))
+    if ('X' not in session['admind']):  return abort(404)
+    abs_path = os.path.join(app.config['storeuser'], subpath)
+    if not os.path.exists(abs_path): return abort(404)
+        
+    if os.path.isdir(abs_path):
+
+        items = os.listdir(abs_path)
+        if app.config['hidden_user']: items = [item for item in items if not item.startswith('.')]
+        #items = [item for item in items if not item.startswith('.')]
+        dirs = [item for item in items if os.path.isdir(os.path.join(abs_path, item))]
+        files = [item for item in items if os.path.isfile(os.path.join(abs_path, item))]
+        return render_template('storeuser.html', dirs=dirs, files=files, subpath=subpath, )
+    elif os.path.isfile(abs_path): 
+        
+        if ("html" in request.args): 
+            new_abs_path = f'{abs_path}.html'
+            dprint(f"● {session['uid']} ◦ {session['named']} creating new html {subpath} from user-store via {request.remote_addr}")
+            try:
+                with open(f'{abs_path}.html', 'w') as f: 
+                    if abs_path.lower().endswith(".ipynb"): f.write(nb2html( abs_path ))
+                    else: f.write(f'Unsupported format for html {subpath}')
+                dprint(f"● {session['uid']} ◦ {session['named']} created new html {subpath} from user-store via {request.remote_addr}") 
+                return redirect(url_for('route_storeuser', subpath=os.path.dirname(subpath))) #send_file(f'{abs_path}.html', as_attachment=False)      
+            except: return abort(404)
+            
+        else: 
+            dprint(f"● {session['uid']} ◦ {session['named']} downloaded {subpath} from user-store via {request.remote_addr}")
+            return send_file(abs_path, as_attachment=("get" in request.args))
+    else: return abort(404)
+
+
 # ------------------------------------------------------------------------------------------
 # administrative
 # ------------------------------------------------------------------------------------------
@@ -858,7 +2317,6 @@ def route_adminpage(req_cmd):
     if '+' in session['admind']: 
         if in_cmd: 
             if   in_cmd=="ref_downloads": STATUS, SUCCESS = update_dl()
-            elif in_cmd=="ref_archives": STATUS, SUCCESS = update_al()
             elif in_cmd=="db_write": STATUS, SUCCESS = persist_db()
             elif in_cmd=="db_read": STATUS, SUCCESS = reload_db()
             elif in_cmd=="ref_board": STATUS, SUCCESS = refresh_board()
@@ -875,11 +2333,7 @@ def update_dl():
     dprint(f"▶ {session['uid']} ◦ {session['named']} just refreshed the download list via {request.remote_addr}")
     return "Updated download-list", True #  STATUS, SUCCESS
 
-def update_al():
-    r""" refreshes the  downloads"""
-    app.config['afl'] = GET_FILE_LIST(ARCHIVE_FOLDER_PATH)
-    dprint(f"▶ {session['uid']} ◦ {session['named']} just refreshed the archive list via {request.remote_addr}")
-    return "Updated archive-list", True #  STATUS, SUCCESS
+
 
 def persist_db():
     r""" writes both dbs to disk """
@@ -946,24 +2400,12 @@ def route_repass(req_uid):
 
 
 
-
 # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 #<-------------------DO NOT WRITE ANY NEW CODE AFTER THIS
-def endpoints(athost):
-    if athost=='0.0.0.0':
-        import socket
-        ips=set()
-        for info in socket.getaddrinfo(socket.gethostname(), None):
-            if (info[0].name == socket.AddressFamily.AF_INET.name): ips.add(info[4][0])
-        ips=list(ips)
-        ips.extend(['127.0.0.1', 'localhost'])
-        return ips
-    else: return [f'{athost}']
-    
-
+endpoint = f'{args.host}:{args.port}' if args.host!='0.0.0.0' else f'localhost:{args.port}'
+sprint(f'◉ http://{endpoint}')
 start_time = datetime.datetime.now()
 sprint('◉ start server @ [{}]'.format(start_time))
-for endpoint in endpoints(args.host): sprint(f'◉ http://{endpoint}:{args.port}')
 serve(app, # https://docs.pylonsproject.org/projects/waitress/en/stable/runner.html
     host = args.host,          
     port = args.port,          
@@ -971,7 +2413,6 @@ serve(app, # https://docs.pylonsproject.org/projects/waitress/en/stable/runner.h
     threads = args.threads,    
     connection_limit = args.maxconnect,
     max_request_body_size = MAX_UPLOAD_SIZE,
-    #_quiet=True,
 )
 #<-------------------DO NOT WRITE ANY CODE AFTER THIS
 end_time = datetime.datetime.now()
@@ -983,17 +2424,17 @@ if bool(parsed.coe):
     sprint(f'↪ Cleaning up html/css templates...')
     try:
         for k,v in HTML_TEMPLATES.items():
-            h = os.path.join(TEMPLATES_DIR, f"{k}.html")
+            h = os.path.join(HTML_DIR, f"{k}.html")
             if  os.path.isfile(h) : os.remove(h)
         #sprint(f'↪ Removing css templates @ {STATIC_DIR}')
         for k,v in CSS_TEMPLATES.items():
-            h = os.path.join(STATIC_DIR, f"{k}.css")
+            h = os.path.join(HTML_DIR, f"{k}.css")
             if os.path.isfile(h): os.remove(h)
-        os.removedirs(TEMPLATES_DIR)
-        os.removedirs(STATIC_DIR)
-        sprint(f'↪ Removed html/css templates @ {PYDIR}')
+        #os.removedirs(TEMPLATES_DIR)
+        #os.removedirs(STATIC_DIR)
+        sprint(f'↪ Removed html/css templates @ {HTML_DIR}')
     except:
-        sprint(f'↪ Could not remove html/css templates @ {PYDIR}')
+        sprint(f'↪ Could not remove html/css templates @ {HTML_DIR}')
 sprint('◉ server up-time was [{}]'.format(end_time - start_time))
 sprint(f'...Finished!')
 # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
