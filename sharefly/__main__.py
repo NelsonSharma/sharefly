@@ -132,10 +132,7 @@ try: os.makedirs(WORKDIR, exist_ok=True)
 except: fexit(f'[!] Workspace directory was not found and could not be created')
 sprint(f'↪ Workspace directory is {WORKDIR}')
 
-HTML_DIR = os.path.join(WORKDIR, args.html)
-try: os.makedirs(HTML_DIR, exist_ok=True)
-except: fexit(f'[!] HTML directory was not found and could not be created')
-sprint(f'↪ HTML @ {HTML_DIR}')
+
 #-----------------------------------------------------------------------------------------
 # ==> read configurations
 #-----------------------------------------------------------------------------------------
@@ -402,6 +399,11 @@ except: fexit(f'[!] Could not read config')
 if not len(args): fexit(f'[!] Empty or Invalid config provided')
 # ******************************************************************************************
 
+
+HTML_DIR = os.path.join(WORKDIR, args.html)
+try: os.makedirs(HTML_DIR, exist_ok=True)
+except: fexit(f'[!] HTML directory was not found and could not be created')
+sprint(f'⚙ HTML Directory @ {HTML_DIR}')
 
     
 # Read base dir first 
