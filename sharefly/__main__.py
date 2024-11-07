@@ -117,8 +117,12 @@ elif parsed.verbose>=2: # server and user logs
 else: raise ZeroDivisionError # impossible
 # ------------------------------------------------------------------------------------------
 CWDIR = os.path.abspath(os.getcwd())    # location of run
-sprint(f'Starting...')
+PYDIR = os.path.dirname(__file__) # script directory of __main__.py
 
+
+sprint(f'Starting...')
+sprint(f'↪ Python Module @ {PYDIR}')
+sprint(f'↪ Current Dir @ {CWDIR}')
 sprint(f'↪ Logging @ {LOGFILE}')
 
 # ------------------------------------------------------------------------------------------
@@ -127,6 +131,11 @@ if not WORKDIR: WORKDIR = os.getcwd()                   # if still not specified
 try: os.makedirs(WORKDIR, exist_ok=True)
 except: fexit(f'[!] Workspace directory was not found and could not be created')
 sprint(f'↪ Workspace directory is {WORKDIR}')
+
+HTML_DIR = os.path.join(WORKDIR, args.html)
+try: os.makedirs(HTML_DIR, exist_ok=True)
+except: fexit(f'[!] HTML directory was not found and could not be created')
+sprint(f'↪ HTML @ {HTML_DIR}')
 #-----------------------------------------------------------------------------------------
 # ==> read configurations
 #-----------------------------------------------------------------------------------------
@@ -143,7 +152,7 @@ LOGIN_ORD = ['ADMIN','UID','NAME','PASS']
 SUBMIT_ORD = ['UID', 'NAME', 'SCORE', 'REMARK', 'BY']
 
 DEFAULT_USER = 'admin'
-DEFAULT_ACCESS = f'DABUSR+-'
+DEFAULT_ACCESS = f'DABUSRX+-'
 
 
 #-----------------------------------------------------------------------------------------
@@ -479,14 +488,6 @@ except: fexit(f'[!] reports folder @ {REPORT_FOLDER_PATH} was not found and coul
 sprint(f'⚙ Reports Folder: {REPORT_FOLDER_PATH}')
 
 
-
-
-
-
-
-
-
-
 ALLOWED_EXTENSIONS = set([x.strip() for x in args.ext.split(',') if x])  # a set or list of file extensions that are allowed to be uploaded 
 if '' in ALLOWED_EXTENSIONS: ALLOWED_EXTENSIONS.remove('')
 VALID_FILES_PATTERN = GET_VALID_RE_PATTERN(ALLOWED_EXTENSIONS)
@@ -519,6 +520,9 @@ if not (MAX_UPLOAD_COUNT is inf): INITIAL_UPLOAD_STATUS.append((-1, f'max upload
 sprint(f'⚙ Upload Settings ({len(INITIAL_UPLOAD_STATUS)})')
 for s in INITIAL_UPLOAD_STATUS: sprint(f' ⇒ {s[1]}')
 # ------------------------------------------------------------------------------------------
+
+
+
 
 
 # ------------------------------------------------------------------------------------------
@@ -1589,27 +1593,15 @@ style = """
 )
 # ******************************************************************************************
 
-#PYDIR = os.path.dirname(__file__) # script directory of __main__.py
-HTML_DIR = os.path.join(WORKDIR, args.html)
 
-#sprint(f'↪ Creating html/css templates @ {PYDIR}')
-
-os.makedirs(HTML_DIR, exist_ok=True)
-#sprint(f'↪ Creating html templates @ {TEMPLATES_DIR}')
 for k,v in HTML_TEMPLATES.items():
     h = os.path.join(HTML_DIR, f"{k}.html")
     if (not os.path.isfile(h)) or bool(parsed.cos):
-        #sprint(f'  ↦ page:{h}')
         with open(h, 'w', encoding='utf-8') as f: f.write(v)
-
-#os.makedirs(STATIC_DIR, exist_ok=True)
-#sprint(f'↪ Creating css templates @ {STATIC_DIR}')
 for k,v in CSS_TEMPLATES.items():
     h = os.path.join(HTML_DIR, f"{k}.css")
     if (not os.path.isfile(h)) or bool(parsed.cos):
-        #sprint(f'  ↦ page:{h}')
         with open(h, 'w', encoding='utf-8') as f: f.write(v)
-
 sprint(f'↪ Created html/css templates @ {HTML_DIR}')
 
 
@@ -2402,10 +2394,25 @@ def route_repass(req_uid):
 
 # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 #<-------------------DO NOT WRITE ANY NEW CODE AFTER THIS
-endpoint = f'{args.host}:{args.port}' if args.host!='0.0.0.0' else f'localhost:{args.port}'
-sprint(f'◉ http://{endpoint}')
+#%% Server Section
+def endpoints(athost):
+    if athost=='0.0.0.0':
+        import socket
+        ips=set()
+        for info in socket.getaddrinfo(socket.gethostname(), None):
+            if (info[0].name == socket.AddressFamily.AF_INET.name): ips.add(info[4][0])
+        ips=list(ips)
+        ips.extend(['127.0.0.1', 'localhost'])
+        return ips
+    else: return [f'{athost}']
+
+# endpoint = f'{args.host}:{args.port}' if args.host!='0.0.0.0' else f'localhost:{args.port}'
+# sprint(f'◉ http://{endpoint}')
+# start_time = datetime.datetime.now()
+# sprint('◉ start server @ [{}]'.format(start_time))
 start_time = datetime.datetime.now()
 sprint('◉ start server @ [{}]'.format(start_time))
+for endpoint in endpoints(parsed.host): sprint(f'◉ http://{endpoint}:{parsed.port}')
 serve(app, # https://docs.pylonsproject.org/projects/waitress/en/stable/runner.html
     host = args.host,          
     port = args.port,          
