@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name =                      'sharefly',
-    version =                   '0.0.3',
+    version =                   '0.0.4',
     url =                       'https://github.com/NelsonSharma/sharefly',
     author =                    'Nelson.S',
     author_email =              'mail.nelsonsharma@gmail.com',
