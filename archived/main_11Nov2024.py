@@ -162,24 +162,14 @@ DEFAULT_ACCESS = f'DABUSRX+-'
 
 #-----------------------------------------------------------------------------------------
 
-#-----------------------------------------------------------------------------------------
-# password policy
-#-----------------------------------------------------------------------------------------
-def VALIDATE_PASS(instr):   # a function that can validate the password - returns bool type
-    try: assert (len(instr) < MAX_STR_LEN) and bool(re.fullmatch("(\w|@|\.)+", instr)) # alpha_numeric @.
-    except AssertionError: return False
-    return True
-#-----------------------------------------------------------------------------------------
-# uid policy
-def VALIDATE_UID(instr):   # a function that can validate the uid - returns bool type
-    try: assert (len(instr) < MAX_STR_LEN) and bool(re.fullmatch("(\w)+", instr)) # alpha_numeric 
-    except AssertionError: return False
-    return True
-#-----------------------------------------------------------------------------------------
-#-----------------------------------------------------------------------------------------
-# name policy
-def VALIDATE_NAME(instr): return  (len(instr) >0) and (len(instr) < MAX_STR_LEN) and bool(re.fullmatch("((\w)(\w|\s)*(\w))|(\w)", instr)) # alpha-neumeric but no illegal spaces before or after
-#-----------------------------------------------------------------------------------------
+def rematch(instr, pattern):  return \
+    (len(instr) >= 0) and \
+    (len(instr) <= MAX_STR_LEN) and \
+    (re.match(pattern, instr))
+
+def VALIDATE_PASS(instr):     return rematch(instr, r'^[a-zA-Z0-9~!@#$%^&*()_+{}<>?`\-=\[\].]+$')
+def VALIDATE_UID(instr):      return rematch(instr, r'^[a-zA-Z0-9._@]+$')
+def VALIDATE_NAME(instr):     return rematch(instr, r'^[a-zA-Z]+(?: [a-zA-Z]+)*$')
 
 # this is useful for docker
 # we try to read args from os env variables
@@ -195,6 +185,7 @@ default = dict(
     register     = "Register!",            # msg shown on register (new-user) page
     emoji        = "🦋",                    # emoji shown of login page and seperates uid - name
     rename       = 0,                      # if rename=1, allows users to update their names when logging in
+    repass       = 1,                      # if repass=1, allows admins and Xs to reset passwords for users - should be enabled in only one session (for multi-session)
     case         = 0,                      # case-sentivity level in uid
                                             #   (if case=0 uids are not converted           when matching in database)
                                             #   (if case>0 uids are converted to upper-case when matching in database)
@@ -304,13 +295,6 @@ def GET_SECRET_KEY(postfix):
     for _ in range(datetime.datetime.now().second): _ = randx()
     r4 = randx()
     return ':{}:{}:{}:{}:{}:'.format(r1,r2,r3,r4,postfix)
-
-
-def GET_VALID_RE_PATTERN(validext):
-    if not validext: return ".+"
-    pattern=""
-    for e in validext: pattern+=f'{e}|'
-    return pattern[:-1]
 
 
 def CREATE_LOGIN_FILE(login_xl_path):  
@@ -504,7 +488,7 @@ sprint(f'⚙ Reports Folder: {REPORT_FOLDER_PATH}')
 
 ALLOWED_EXTENSIONS = set([x.strip() for x in args.ext.split(',') if x])  # a set or list of file extensions that are allowed to be uploaded 
 if '' in ALLOWED_EXTENSIONS: ALLOWED_EXTENSIONS.remove('')
-VALID_FILES_PATTERN = GET_VALID_RE_PATTERN(ALLOWED_EXTENSIONS)
+VALID_FILES_PATTERN = pattern = r'^[\w\-. ]+\.(?:' + '|'.join(ALLOWED_EXTENSIONS) + r')$'
 REQUIRED_FILES = set([x.strip() for x in args.required.split(',') if x])  # a set or list of file extensions that are required to be uploaded 
 if '' in REQUIRED_FILES: REQUIRED_FILES.remove('')
 def VALIDATE_FILENAME(filename):   # a function that checks for valid file extensions based on ALLOWED_EXTENSIONS
@@ -512,7 +496,7 @@ def VALIDATE_FILENAME(filename):   # a function that checks for valid file exten
         name, ext = filename.rsplit('.', 1)
         safename = f'{name}.{ext.lower()}'
         if REQUIRED_FILES:  isvalid = (safename in REQUIRED_FILES)
-        else:               isvalid = bool(re.fullmatch(f'.+\.({VALID_FILES_PATTERN})$', safename))
+        else:               isvalid = re.match(VALID_FILES_PATTERN, safename, re.IGNORECASE)  # Case-insensitive matching
     else:               
         name, ext = filename, ''
         safename = f'{name}'
@@ -520,11 +504,12 @@ def VALIDATE_FILENAME(filename):   # a function that checks for valid file exten
         else:               isvalid = (not ALLOWED_EXTENSIONS)
     return isvalid, safename
 
-def VALIDATE_FILENAME_SUBMIT(filename, csvext):   # a function that checks for valid file extensions based on ALLOWED_EXTENSIONS
+VALID_FILES_PATTERN_SUMBIT = pattern = r'^[\w\-. ]+\.(?:' + '|'.join(['csv', 'txt']) + r')$'
+def VALIDATE_FILENAME_SUBMIT(filename): 
     if '.' in filename: 
         name, ext = filename.rsplit('.', 1)
         safename = f'{name}.{ext.lower()}'
-        isvalid = (ext.lower() == csvext)
+        isvalid = isvalid = re.match(VALID_FILES_PATTERN_SUMBIT, safename, re.IGNORECASE)
     else:               
         name, ext = filename, ''
         safename = f'{name}'
@@ -1875,6 +1860,7 @@ app.config['rename'] =    int(args.rename)
 app.config['muc'] =       MAX_UPLOAD_COUNT
 app.config['board'] =     (BOARD_FILE_MD is not None)
 app.config['reg'] =       (parsed.reg)
+app.config['repass'] =    bool(args.repass)
 # ------------------------------------------------------------------------------------------
 class UploadFileForm(FlaskForm): # The upload form using FlaskForm
     file = MultipleFileField("File", validators=[InputRequired()])
@@ -2151,23 +2137,43 @@ def route_generate_submit_report():
     pending_uids = remaining_uids.difference(absent_uids)
     return \
     f"""
-    <hr>
-    <h2>Pending [{len(pending_uids)}]:</h2>
-    <pre>
-        {'\n\t'.join(pending_uids)}
-    </pre>
-    <hr>
-    <h2>Absent [{len(absent_uids)}]:</h2>
-    <pre>
-        {'\n\t'.join(absent_uids)}
-    </pre>
-    <hr>
-    <h2>Finished [{len(finished_uids)}]:</h2>
-    <pre>
-        {'\n\t'.join(finished_uids)}
-    </pre>
-    <hr>
+    <style>
+    td {{padding: 10px;}}
+    th {{padding: 5px;}}
+    tr {{vertical-align: top;}}
+    </style>
+    <table border="1">
+        <tr>
+            <th>Pending [{len(pending_uids)}]</th>
+            <th>Absent [{len(absent_uids)}]</th>
+            <th>Finished [{len(finished_uids)}]</th>
+        </tr>
+        <tr>
+            <td><pre>{'\n'.join(pending_uids)}</pre></td>
+            <td><pre>{'\n'.join(absent_uids)}</pre></td>
+            <td><pre>{'\n'.join(finished_uids)}</pre></td>
+        </tr>
+        
+    </table>
     """
+    # f"""
+    # <hr>
+    # <h2>Pending [{len(pending_uids)}]:</h2>
+    # <pre>
+    #     {'\n\t'.join(pending_uids)}
+    # </pre>
+    # <hr>
+    # <h2>Absent [{len(absent_uids)}]:</h2>
+    # <pre>
+    #     {'\n\t'.join(absent_uids)}
+    # </pre>
+    # <hr>
+    # <h2>Finished [{len(finished_uids)}]:</h2>
+    # <pre>
+    #     {'\n\t'.join(finished_uids)}
+    # </pre>
+    # <hr>
+    # """
     # report = dict(
     #     #all = list(all_uids),
     #     #finished = list(finished_uids),
@@ -2278,7 +2284,7 @@ def route_submit():
                     
             
 
-
+        if success: persist_subdb()
 
     elif request.method == 'POST': 
         
@@ -2679,23 +2685,25 @@ def refresh_board():
 def route_repass(req_uid):
     r""" reset user password"""
     if not session.get('has_login', False): return redirect(url_for('route_login')) # "Not Allowed - Requires Login"
-    if ('+' in session['admind']): 
-        in_uid = f'{req_uid}'
-        if in_uid: 
-            in_query = in_uid if not args.case else (in_uid.upper() if args.case>0 else in_uid.lower())
-            global db#, HAS_PENDING
-            record = db.get(in_query, None)
-            if record is not None: 
-                admind, uid, named, _ = record
-                if ('+' not in admind) or (session['uid']==uid):
-                    db[uid][3]='' ## 3 for PASS  record['PASS'].values[0]=''
-                    #HAS_PENDING+=1
-                    dprint(f"▶ {session['uid']} ◦ {session['named']} just reset the password for {uid} ◦ {named} via {request.remote_addr}")
-                    STATUS, SUCCESS =  f"Password was reset for {uid} {named}", True
-                else: STATUS, SUCCESS =  f"You cannot reset password for account '{in_query}'", False
-            else: STATUS, SUCCESS =  f"User '{in_query}' not found", False
-        else: STATUS, SUCCESS =  f"User-id was not provided", False
-    else: STATUS, SUCCESS =  "You are not allow to reset passwords", False
+    if app.config['repass']:
+        if ('+' in session['admind']): 
+            in_uid = f'{req_uid}'
+            if in_uid: 
+                in_query = in_uid if not args.case else (in_uid.upper() if args.case>0 else in_uid.lower())
+                global db#, HAS_PENDING
+                record = db.get(in_query, None)
+                if record is not None: 
+                    admind, uid, named, _ = record
+                    if ('+' not in admind) or (session['uid']==uid):
+                        db[uid][3]='' ## 3 for PASS  record['PASS'].values[0]=''
+                        #HAS_PENDING+=1
+                        dprint(f"▶ {session['uid']} ◦ {session['named']} just reset the password for {uid} ◦ {named} via {request.remote_addr}")
+                        STATUS, SUCCESS =  f"Password was reset for {uid} {named}", True
+                    else: STATUS, SUCCESS =  f"You cannot reset password for account '{in_query}'", False
+                else: STATUS, SUCCESS =  f"User '{in_query}' not found", False
+            else: STATUS, SUCCESS =  f"User-id was not provided", False
+        else: STATUS, SUCCESS =  "You are not allow to reset passwords", False
+    else: STATUS, SUCCESS =  "Password reset is disabled for this session", False
     return render_template('admin.html',  status=STATUS, success=SUCCESS)
 # ------------------------------------------------------------------------------------------
 @app.route('/xx/', methods =['GET'], defaults={'req_uid': ''})
@@ -2705,22 +2713,24 @@ def route_repassx(req_uid):
     if not session.get('has_login', False): return redirect(url_for('route_login')) # "Not Allowed - Requires Login"
     form = UploadFileForm()
     results = []
-    if ('X' in session['admind']) or ('+' in session['admind']):
-        in_uid = f'{req_uid}'
-        if in_uid: 
-            in_query = in_uid if not args.case else (in_uid.upper() if args.case>0 else in_uid.lower())
-            record = db.get(in_query, None)
-            if record is not None: 
-                admind, uid, named, _ = record
-                if (('X' not in admind) and ('+' not in admind)) or (session['uid']==uid):
-                    db[uid][3]='' ## 3 for PASS  record['PASS'].values[0]=''
-                    #HAS_PENDING+=1
-                    dprint(f"▶ {session['uid']} ◦ {session['named']} just reset the password for {uid} ◦ {named} via {request.remote_addr}")
-                    STATUS, SUCCESS =  f"Password was reset for {uid} {named}", True
-                else: STATUS, SUCCESS =  f"You cannot reset password for account '{in_query}'", False
-            else: STATUS, SUCCESS =  f"User '{in_query}' not found", False
-        else: STATUS, SUCCESS =  f"User-id was not provided", False
-    else: STATUS, SUCCESS =  "You are not allow to reset passwords", False
+    if app.config['repass']:
+        if ('X' in session['admind']) or ('+' in session['admind']):
+            in_uid = f'{req_uid}'
+            if in_uid: 
+                in_query = in_uid if not args.case else (in_uid.upper() if args.case>0 else in_uid.lower())
+                record = db.get(in_query, None)
+                if record is not None: 
+                    admind, uid, named, _ = record
+                    if (('X' not in admind) and ('+' not in admind)) or (session['uid']==uid):
+                        db[uid][3]='' ## 3 for PASS  record['PASS'].values[0]=''
+                        #HAS_PENDING+=1
+                        dprint(f"▶ {session['uid']} ◦ {session['named']} just reset the password for {uid} ◦ {named} via {request.remote_addr}")
+                        STATUS, SUCCESS =  f"Password was reset for {uid} {named}", True
+                    else: STATUS, SUCCESS =  f"You cannot reset password for account '{in_query}'", False
+                else: STATUS, SUCCESS =  f"User '{in_query}' not found", False
+            else: STATUS, SUCCESS =  f"User-id was not provided", False
+        else: STATUS, SUCCESS =  "You are not allow to reset passwords", False
+    else: STATUS, SUCCESS =  "Password reset is disabled for this session", False
     return render_template('submit.html',  status=STATUS, success=SUCCESS, form=form, results=results)
 # ------------------------------------------------------------------------------------------
 
