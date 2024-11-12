@@ -36,6 +36,8 @@ parser.add_argument('--cos', type=int, default=1, help="use 1 to create-on-start
 parser.add_argument('--coe', type=int, default=0, help="use 1 to clean-on-exit - deletes pages")
 
 parser.add_argument('--access', type=str, default='', help="if specified, allow users to add access string such as DABU or DABUS+")
+parser.add_argument('--msl', type=int, default=100, help="Max String Length for UID/NAME/PASSWORDS")
+parser.add_argument('--eip', type=int, default=1, help="Evaluate Immediate Persis. If True, persist the eval-db after each single evaluation (eval-db in always persisted after update from template)")
 parsed = parser.parse_args()
 # ------------------------------------------------------------------------------------------
 # imports
@@ -141,10 +143,11 @@ CONFIG = parsed.con if parsed.con else 'default' # the config-dict to read from
 CONFIG_MODULE = 'configs'  # the name of configs module
 CONFIGS_FILE = f'{CONFIG_MODULE}.py' # the name of configs file
 
-CSV_DELIM=','
-SSV_DELIM='\n'
-MAX_STR_LEN=50
-CSV_DTYPE=f'U{MAX_STR_LEN*2}'
+CSV_DELIM = ','
+SSV_DELIM = '\n'
+MAX_STR_LEN = int(parsed.msl) if parsed.msl>0 else 1
+NEWLINE = '\n'
+TABLINE = '\t'
 
 LOGIN_ORD = ['ADMIN','UID','NAME','PASS']
 LOGIN_ORD_MAPPING = {v:i for i,v in enumerate(LOGIN_ORD)}
@@ -202,7 +205,7 @@ default = dict(
     html         = "__pycache__",         # use pycache dir to store flask html
     secret       = "__secret__.txt",      # flask app secret
     login        = "__login__.csv",       # login database
-    eval         = "__eval__",            # evaluation database - created if not existing - reloads if exists
+    eval         = "__eval__.csv",        # evaluation database - created if not existing - reloads if exists
     uploads      = "__uploads__",         # uploads folder (uploaded files by users go here)
     reports      = "__reports__",         # reports folder (personal user access files by users go here)
     downloads    = "__downloads__",       # downloads folder
@@ -382,7 +385,17 @@ try:
 except: fexit(f'[!] Could import configs module "{CONFIG_MODULE}" at "{CONFIGS_FILE_PATH[:-3]}"')
 try:
     sprint(f'↪ Reading config from {CONFIG_MODULE}.{CONFIG}')
-    config_dict = getattr(c_module, CONFIG)
+    if "." in CONFIG: 
+        CONFIGX = CONFIG.split(".")
+        config_dict = c_module
+        while CONFIGX:
+            m = CONFIGX.pop(0).strip()
+            if not m: continue
+            config_dict = getattr(config_dict, m)
+    else: config_dict = getattr(c_module, CONFIG)
+
+        
+    
 except:
     fexit(f'[!] Could not read config from {CONFIG_MODULE}.{CONFIG}')
 
@@ -753,7 +766,7 @@ login = """
     
     <div align="center">
     <div>
-    <span style="font-size: xx-large;">{{ config.emoji }}</span>
+    <a href="https://github.com/NelsonSharma/sharefly" target="_blank"><span style="font-size: xx-large;">{{ config.emoji }}</span></a>
     <br>
     {% if config.reg %}
     <a href="{{ url_for('route_new') }}" class="btn_board">""" + f'{style.new_}' +"""</a>
@@ -1790,7 +1803,7 @@ def read_logindb_from_disk():
     else: sprint(f'⇒ Failed reading login file: {LOGIN_XL_PATH}')
     return db_frame
 def read_evaldb_from_disk():
-    dbsub_frame = None
+    dbsub_frame = dict()
     if EVAL_XL_PATH: 
         dbsub_frame, ressub = READ_DB_FROM_DISK(EVAL_XL_PATH, 0)
         if ressub: sprint(f'⇒ Loaded evaluation file: {EVAL_XL_PATH}')
@@ -1856,6 +1869,7 @@ app.config['muc'] =       MAX_UPLOAD_COUNT
 app.config['board'] =     (BOARD_FILE_MD is not None)
 app.config['reg'] =       (parsed.reg)
 app.config['repass'] =    bool(args.repass)
+app.config['eip'] =       bool(parsed.eip)
 # ------------------------------------------------------------------------------------------
 class UploadFileForm(FlaskForm): # The upload form using FlaskForm
     file = MultipleFileField("File", validators=[InputRequired()])
@@ -2119,6 +2133,7 @@ def route_generate_eval_template():
     #except: return abort(404)
     #return send_file(fp)
 
+
 @app.route('/generate_submit_report', methods =['GET'])
 def route_generate_submit_report():
     if not session.get('has_login', False): return redirect(url_for('route_login'))
@@ -2145,9 +2160,9 @@ def route_generate_submit_report():
             <th>Finished [{len(finished_uids)}]</th>
         </tr>
         <tr>
-            <td><pre>{'\n'.join(pending_uids)}</pre></td>
-            <td><pre>{'\n'.join(absent_uids)}</pre></td>
-            <td><pre>{'\n'.join(finished_uids)}</pre></td>
+            <td><pre>{NEWLINE.join(pending_uids)}</pre></td>
+            <td><pre>{NEWLINE.join(absent_uids)}</pre></td>
+            <td><pre>{NEWLINE.join(finished_uids)}</pre></td>
         </tr>
         
     </table>
@@ -2303,7 +2318,7 @@ def route_eval():
 
         else: status, success = f"You posted nothing!", False
         
-        #if success: persist_subdb()
+        if success and app.config['eip']: persist_subdb()
         
     else:
         if ('+' in session['admind']) or ('X' in session['admind']):
@@ -2551,7 +2566,7 @@ def route_storeuser(subpath=""):
         if ("html" in request.args): 
             dprint(f"● {session['uid']} ◦ {session['named']} converting to html from {subpath} via {request.remote_addr}")
             hstatus, hmsg = HConv.convert(abs_path)
-            dprint(f"{'\t... ✓' if hstatus else '\t... ✗'} {hmsg}")
+            dprint(f"{TABLINE}{'... ✓' if hstatus else '... ✗'} {hmsg}")
             return redirect(url_for('route_storeuser', subpath=os.path.dirname(subpath))) 
         else: 
             dprint(f"● {session['uid']} ◦ {session['named']} downloaded {subpath} from user-store via {request.remote_addr}")
