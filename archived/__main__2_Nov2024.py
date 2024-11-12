@@ -242,8 +242,6 @@ default = dict(
                         icon_store=     '📦',
                         icon_eval=      '✴️',
                         icon_report=    '📜',
-                        icon_getfile=   '⬇️',
-                        icon_gethtml=   '🌐',
 
                         # -------------# admin actions 
                         aa_ref_downloads =  '📥',
@@ -545,7 +543,40 @@ for s in INITIAL_UPLOAD_STATUS: sprint(f' ⇒ {s[1]}')
 #-----------------------------------------------------------------------------------------
 # Create HTML
 # ------------------------------------------------------------------------------------------
-style = Fake(**args.style)
+style = Fake(**getattr(args, 'style'))
+
+CAPTION_DOWNLOADS =     style['downloads_']
+CAPTION_UPLOADS =       style['uploads_'] 
+CAPTION_STORE =         style['store_']  
+CAPTION_BOARD =         style['board_'] 
+CAPTION_ADMIN =         style['admin_'] 
+CAPTION_LOGOUT =        style['logout_'] 
+CAPTION_LOGIN =         style['login_'] 
+CAPTION_NEW =           style['new_'] 
+CAPTION_EVAL =          style['eval_'] 
+CAPTION_RESET_PASS =    style['resetpass_'] 
+CAPTION_REPORT =        style['report_'] 
+
+ICON_BOARD =            style['icon_board'] 
+ICON_ADMIN =            style['icon_admin'] 
+ICON_LOGIN =            style['icon_login'] 
+ICON_NEW =              style['icon_new'] 
+ICON_HOME =             style['icon_home'] 
+ICON_DOWNLOADS =        style['icon_downloads'] 
+ICON_UPLOADS =          style['icon_uploads'] 
+ICON_STORE =            style['icon_store'] 
+ICON_EVAL =             style['icon_eval'] 
+ICON_REPORT =           style['icon_report'] 
+
+AA_REFD=                style['aa_ref_downloads'] 
+AA_DBW=                 style['aa_db_write']
+AA_DBR=                 style['aa_db_read']
+AA_REFB=                style['aa_ref_board']
+AA_RESETPASS=           style['aa_reset_pass']
+
+
+TEMPLATE_BOARD =        style['template_board'] 
+
 
 # ******************************************************************************************
 HTML_TEMPLATES = dict(
@@ -556,7 +587,7 @@ evaluate = """
 <html>
     <head>
         <meta charset="UTF-8">
-        <title> """+f'{style.icon_eval}'+""" {{ config.topic }} </title>
+        <title> """+f'{ICON_EVAL}'+""" {{ config.topic }} </title>
         <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">  
     </head>
     <body>
@@ -569,12 +600,12 @@ evaluate = """
         <div class="userword">{{session.uid}} {{ session.emojid }} {{session.named}}</div>
         <br>
         <div class="bridge">
-        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{style.logout_}'+"""</a>
+        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{CAPTION_LOGOUT}'+"""</a>
         <a href="{{ url_for('route_home') }}" class="btn_home">Home</a>
         <a href="{{ url_for('route_eval') }}" class="btn_refresh">Refresh</a>
         <a href="{{ url_for('route_storeuser') }}" class="btn_store">User-Store</a>
         <a href="{{ url_for('route_generate_submit_report') }}" target="_blank" class="btn_board">User-Report</a>
-        <button class="btn_purge_large" onclick="confirm_repass()">"""+f'{style.aa_reset_pass} Reset Password' + """</button>
+        <button class="btn_purge_large" onclick="confirm_repass()">"""+f'{AA_RESETPASS} Reset Password' + """</button>
         
             <script>
                 function confirm_repass() {
@@ -655,7 +686,7 @@ admin = """
 <html>
     <head>
         <meta charset="UTF-8">
-        <title> """+f'{style.icon_admin}'+""" {{ config.topic }} | {{ session.uid }} </title>
+        <title> """+f'{ICON_ADMIN}'+""" {{ config.topic }} | {{ session.uid }} </title>
         <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">					 
     </head>
     <body>
@@ -668,7 +699,7 @@ admin = """
         <div class="userword">{{session.uid}} {{ session.emojid }} {{session.named}}</div>
         <br>
         <div class="bridge">
-        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{style.logout_}'+"""</a>
+        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{CAPTION_LOGOUT}'+"""</a>
         <a href="{{ url_for('route_home') }}" class="btn_home">Home</a>
         <a href="{{ url_for('route_adminpage') }}" class="btn_refresh">Refresh</a>
         </div>
@@ -682,11 +713,11 @@ admin = """
         <br>
         <br>
         {% if '+' in session.admind %}
-        <a href="{{ url_for('route_adminpage',req_cmd='ref_downloads') }}" class="btn_admin_actions">"""+f'{style.aa_ref_downloads}'+"""<span class="tooltiptext">Refresh Downloads</span></a> <!--Update download-list --!>
-        <a href="{{ url_for('route_adminpage',req_cmd='db_write') }}" class="btn_admin_actions">"""+f'{style.aa_db_write}'+"""<span class="tooltiptext">Persist Database</span></a> <!--Persist login-database --!>
-        <a href="{{ url_for('route_adminpage',req_cmd='db_read') }}" class="btn_admin_actions">"""+f'{style.aa_db_read}'+"""<span class="tooltiptext">Reload Database</span></a> <!--Reload login-database --!>
-        <a href="{{ url_for('route_adminpage',req_cmd='ref_board') }}" class="btn_admin_actions">"""+f'{style.aa_ref_board}'+"""<span class="tooltiptext">Refresh Board</span></a> <!--Refresh board --!>
-        <button class="btn_admin_actions" onclick="confirm_repass()">"""+f'{style.aa_reset_pass}'+"""<span class="tooltiptext">Reset Password</span></button>
+        <a href="{{ url_for('route_adminpage',req_cmd='ref_downloads') }}" class="btn_admin_actions">"""+f'{AA_REFD}'+"""<span class="tooltiptext">Refresh Downloads</span></a> <!--Update download-list --!>
+        <a href="{{ url_for('route_adminpage',req_cmd='db_write') }}" class="btn_admin_actions">"""+f'{AA_DBW}'+"""<span class="tooltiptext">Persist Database</span></a> <!--Persist login-database --!>
+        <a href="{{ url_for('route_adminpage',req_cmd='db_read') }}" class="btn_admin_actions">"""+f'{AA_DBR}'+"""<span class="tooltiptext">Reload Database</span></a> <!--Reload login-database --!>
+        <a href="{{ url_for('route_adminpage',req_cmd='ref_board') }}" class="btn_admin_actions">"""+f'{AA_REFB}'+"""<span class="tooltiptext">Refresh Board</span></a> <!--Refresh board --!>
+        <button class="btn_admin_actions" onclick="confirm_repass()">"""+f'{AA_RESETPASS}'+"""<span class="tooltiptext">Reset Password</span></button>
         
             <script>
                 function confirm_repass() {
@@ -710,7 +741,7 @@ login = """
 <html>
     <head>
         <meta charset="UTF-8">
-        <title> """+f'{style.icon_login}'+""" {{ config.topic }} </title>
+        <title> """+f'{ICON_LOGIN}'+""" {{ config.topic }} </title>
         <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">  
     </head>
     <body>
@@ -743,7 +774,7 @@ login = """
             <br>
             {% endif %}
             <br>
-            <input type="submit" class="btn_login" value=""" +f'"{style.login_}"'+ """> 
+            <input type="submit" class="btn_login" value=""" +f'"{CAPTION_LOGIN}"'+ """> 
             <br>
             <br>
         </form>
@@ -756,9 +787,11 @@ login = """
     <span style="font-size: xx-large;">{{ config.emoji }}</span>
     <br>
     {% if config.reg %}
-    <a href="{{ url_for('route_new') }}" class="btn_board">""" + f'{style.new_}' +"""</a>
+    <a href="{{ url_for('route_new') }}" class="btn_board">""" + f'{CAPTION_NEW}' +"""</a>
     {% endif %}
     </div>
+    <!-- <a href="https://emojipicker.com/" target="_blank" class="btn_login">...</a> -->
+    <!--<div style="font-size:large"><a href="https://github.com/NelsonSharma/topics"  target="_blank"> 📤 📥 </a></div>-->
     <br>
     </div>
     <!-- ---------------------------------------------------------->
@@ -770,7 +803,7 @@ new = """
 <html>
     <head>
         <meta charset="UTF-8">
-        <title> """+f'{style.icon_new}'+""" {{ config.topic }} </title>
+        <title> """+f'{ICON_NEW}'+""" {{ config.topic }} </title>
         <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">  
     </head>
     <body>
@@ -798,7 +831,7 @@ new = """
             <input id="named" name="named" type="text" placeholder="... name ..." class="txt_login"/>
             <br>
             <br>
-            <input type="submit" class="btn_board" value=""" + f'"{style.new_}"' +"""> 
+            <input type="submit" class="btn_board" value=""" + f'"{CAPTION_NEW}"' +"""> 
             <br>
             <br>
             
@@ -811,9 +844,11 @@ new = """
     <div>
     <span style="font-size: xx-large;">{{ config.emoji }}</span>
     <br>
-    <a href="{{ url_for('route_login') }}" class="btn_login">""" + f'{style.login_}' +"""</a>
+    <a href="{{ url_for('route_login') }}" class="btn_login">""" + f'{CAPTION_LOGIN}' +"""</a>
     
     </div>
+    <!-- <a href="https://emojipicker.com/" target="_blank" class="btn_login">...</a> -->
+    <!--<div style="font-size:large"><a href="https://github.com/NelsonSharma/topics"  target="_blank"> 📤 📥 </a></div>-->
     <br>
     </div>
     <!-- ---------------------------------------------------------->
@@ -825,7 +860,7 @@ downloads = """
 <html>
     <head>
         <meta charset="UTF-8">
-        <title> """+f'{style.icon_downloads}'+""" {{ config.topic }} | {{ session.uid }} </title>
+        <title> """+f'{ICON_DOWNLOADS}'+""" {{ config.topic }} | {{ session.uid }} </title>
         <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">           
     </head>
     <body>
@@ -838,12 +873,12 @@ downloads = """
         <div class="userword">{{session.uid}} {{ session.emojid }} {{session.named}}</div>
         <br>
         <div class="bridge">
-        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{style.logout_}'+"""</a>
+        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{CAPTION_LOGOUT}'+"""</a>
         <a href="{{ url_for('route_home') }}" class="btn_home">Home</a>
         </div>
         <br>
         <br>
-        <div class="files_status">"""+f'{style.downloads_}'+"""</div>
+        <div class="files_status">"""+f'{CAPTION_DOWNLOADS}'+"""</div>
         <br>
         <div class="files_list_down">
             <ol>
@@ -868,7 +903,7 @@ storeuser = """
 <html>
     <head>
         <meta charset="UTF-8">
-        <title> """+f'{style.icon_store}'+""" {{ config.topic }} | {{ session.uid }} </title>
+        <title> """+f'{ICON_STORE}'+""" {{ config.topic }} | {{ session.uid }} </title>
         <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">           
     </head>
     <body>
@@ -881,9 +916,9 @@ storeuser = """
         <div class="userword">{{session.uid}} {{ session.emojid }} {{session.named}}</div>
         <br>
         <div class="bridge">
-        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{style.logout_}'+"""</a>
+        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{CAPTION_LOGOUT}'+"""</a>
         <a href="{{ url_for('route_home') }}" class="btn_home">Home</a>
-        <a href="{{ url_for('route_eval') }}" class="btn_submit">"""+f'{style.eval_}'+"""</a>
+        <a href="{{ url_for('route_eval') }}" class="btn_submit">"""+f'{CAPTION_EVAL}'+"""</a>
         {% if not subpath %}
         {% if session.hidden_storeuser %}
             <span class="files_status">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Hidden Files: </span><a href="{{ url_for('route_hidden_show', user_enable='10') }}" class="btn_disable">Enabled</a>
@@ -922,10 +957,10 @@ storeuser = """
             {% for (file, hfile) in files %}
             {% if (session.hidden_storeuser) or (not hfile) %}
                 <li>
-                <a href="{{ url_for('route_storeuser', subpath=subpath + '/' + file, get='') }}">"""+f'{style.icon_getfile}'+"""</a> 
+                <a href="{{ url_for('route_storeuser', subpath=subpath + '/' + file, get='') }}">⬇️</a> 
                 <a href="{{ url_for('route_storeuser', subpath=subpath + '/' + file) }}" target="_blank">{{ file }}</a>
                 {% if file.lower().endswith('.ipynb') %}
-                <a href="{{ url_for('route_storeuser', subpath=subpath + '/' + file, html='') }}">"""+f'{style.icon_gethtml}'+"""</a> 
+                <a href="{{ url_for('route_storeuser', subpath=subpath + '/' + file, html='') }}">🌐</a> 
                 {% endif %}
                 </li>
             {% endif %}
@@ -947,7 +982,7 @@ store = """
 <html>
     <head>
         <meta charset="UTF-8">
-        <title> """+f'{style.icon_store}'+""" {{ config.topic }} | {{ session.uid }} </title>
+        <title> """+f'{ICON_STORE}'+""" {{ config.topic }} | {{ session.uid }} </title>
         <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">           
     </head>
     <body>
@@ -960,7 +995,7 @@ store = """
         <div class="userword">{{session.uid}} {{ session.emojid }} {{session.named}}</div>
         <br>
         <div class="bridge">
-        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{style.logout_}'+"""</a>
+        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{CAPTION_LOGOUT}'+"""</a>
         <a href="{{ url_for('route_home') }}" class="btn_home">Home</a>
         {% if not subpath %}
         {% if session.hidden_store %}
@@ -1000,7 +1035,7 @@ store = """
             {% for (file, hfile) in files %}
             {% if (session.hidden_store) or (not hfile) %}
                 <li>
-                <a href="{{ url_for('route_store', subpath=subpath + '/' + file, get='') }}">"""+f'{style.icon_getfile}'+"""</a> 
+                <a href="{{ url_for('route_store', subpath=subpath + '/' + file, get='') }}">⬇️</a> 
                 <a href="{{ url_for('route_store', subpath=subpath + '/' + file) }}" target="_blank" >{{ file }}</a>
                
                 </li>
@@ -1024,7 +1059,7 @@ uploads = """
 <html>
     <head>
         <meta charset="UTF-8">
-        <title> """+f'{style.icon_uploads}'+""" {{ config.topic }} | {{ session.uid }} </title>
+        <title> """+f'{ICON_UPLOADS}'+""" {{ config.topic }} | {{ session.uid }} </title>
         <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">           
     </head>
     <body>
@@ -1037,12 +1072,12 @@ uploads = """
         <div class="userword">{{session.uid}} {{ session.emojid }} {{session.named}}</div>
         <br>
         <div class="bridge">
-        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{style.logout_}'+"""</a>
+        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{CAPTION_LOGOUT}'+"""</a>
         <a href="{{ url_for('route_home') }}" class="btn_home">Home</a>
         </div>
         <br>
         <br>
-        <div class="files_status">"""+f'{style.uploads_}'+"""</div>
+        <div class="files_status">"""+f'{CAPTION_UPLOADS}'+"""</div>
         <br>
         <div class="files_list_down">
             <ol>
@@ -1067,7 +1102,7 @@ reports = """
 <html>
     <head>
         <meta charset="UTF-8">
-        <title> """+f'{style.icon_report}'+""" {{ config.topic }} | {{ session.uid }} </title>
+        <title> """+f'{ICON_REPORT}'+""" {{ config.topic }} | {{ session.uid }} </title>
         <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">           
     </head>
     <body>
@@ -1080,12 +1115,12 @@ reports = """
         <div class="userword">{{session.uid}} {{ session.emojid }} {{session.named}}</div>
         <br>
         <div class="bridge">
-        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{style.logout_}'+"""</a>
+        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{CAPTION_LOGOUT}'+"""</a>
         <a href="{{ url_for('route_home') }}" class="btn_home">Home</a>
         </div>
         <br>
         <br>
-        <div class="files_status">"""+f'{style.report_}'+"""</div>
+        <div class="files_status">"""+f'{CAPTION_REPORT}'+"""</div>
         <br>
         <div class="files_list_down">
             <ol>
@@ -1110,7 +1145,7 @@ home="""
 <html>
     <head>
         <meta charset="UTF-8">
-        <title> """+f'{style.icon_home}'+""" {{ config.topic }} | {{ session.uid }} </title>
+        <title> """+f'{ICON_HOME}'+""" {{ config.topic }} | {{ session.uid }} </title>
         <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">					 
     </head>
     <body>
@@ -1123,28 +1158,28 @@ home="""
         <div class="userword">{{session.uid}} {{ session.emojid }} {{session.named}}</div>
         <br>
         <div class="bridge">
-        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{style.logout_}'+"""</a>
+        <a href="{{ url_for('route_logout') }}" class="btn_logout">"""+f'{CAPTION_LOGOUT}'+"""</a>
         {% if "S" in session.admind %}
-        <a href="{{ url_for('route_uploads') }}" class="btn_upload">"""+f'{style.uploads_}'+"""</a>
+        <a href="{{ url_for('route_uploads') }}" class="btn_upload">"""+f'{CAPTION_UPLOADS}'+"""</a>
         {% endif %}
         {% if "D" in session.admind %}
-        <a href="{{ url_for('route_downloads') }}" class="btn_download">"""+f'{style.downloads_}'+"""</a>
+        <a href="{{ url_for('route_downloads') }}" class="btn_download">"""+f'{CAPTION_DOWNLOADS}'+"""</a>
         {% endif %}
         {% if "A" in session.admind %}
-        <a href="{{ url_for('route_store') }}" class="btn_store">"""+f'{style.store_}'+"""</a>
+        <a href="{{ url_for('route_store') }}" class="btn_store">"""+f'{CAPTION_STORE}'+"""</a>
         {% endif %}
         {% if "B" in session.admind and config.board %}
-        <a href="{{ url_for('route_board') }}" class="btn_board" target="_blank">"""+f'{style.board_}'+"""</a>
+        <a href="{{ url_for('route_board') }}" class="btn_board" target="_blank">"""+f'{CAPTION_BOARD}'+"""</a>
         {% endif %}
         {% if 'X' in session.admind or '+' in session.admind %}
-        <a href="{{ url_for('route_eval') }}" class="btn_submit">"""+f'{style.eval_}'+"""</a>
+        <a href="{{ url_for('route_eval') }}" class="btn_submit">"""+f'{CAPTION_EVAL}'+"""</a>
         {% endif %}
         {% if 'R' in session.admind %}
-        <a href="{{ url_for('route_reports') }}" class="btn_report">"""+f'{style.report_}'+"""</a>
+        <a href="{{ url_for('route_reports') }}" class="btn_report">"""+f'{CAPTION_REPORT}'+"""</a>
         {% endif %}
         
         {% if '+' in session.admind %}
-        <a href="{{ url_for('route_adminpage') }}" class="btn_admin">"""+f'{style.admin_}'+"""</a>
+        <a href="{{ url_for('route_adminpage') }}" class="btn_admin">"""+f'{CAPTION_ADMIN}'+"""</a>
         {% endif %}
         </div>
         <br>
@@ -1226,8 +1261,7 @@ body {{
     color: {style.fgcolor};
 }}
 
-a {{
-    color: {style.refcolor};
+li {{
     text-decoration: none;
 }}
 
@@ -1764,7 +1798,7 @@ def update_board():
     res = False
     if BOARD_FILE_MD:
         try: 
-            page,_ = HTMLExporter(template_name=style.template_board).from_file(BOARD_FILE_MD, {'metadata':{'name':f'{style.icon_board} {style.board_} | {args.topic}'}}) 
+            page,_ = HTMLExporter(template_name=TEMPLATE_BOARD).from_file(BOARD_FILE_MD, {'metadata':{'name':f'{ICON_BOARD} {CAPTION_BOARD} | {args.topic}'}}) 
             BOARD_PAGE = page
             sprint(f'⚙ Board File was updated: {BOARD_FILE_MD}')
             res=True
