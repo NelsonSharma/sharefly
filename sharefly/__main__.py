@@ -692,6 +692,7 @@ admin = """
         <span class="admin_mid" style="animation-name: fader_admin_failed;">✗ {{ status }} </span>
         {% endif %}
         <br>
+	<br>
         {% if '+' in session.admind %}
         <a href="{{ url_for('route_adminpage',req_cmd='ref_downloads') }}" class="btn_admin_actions">"""+f'{style.aa_ref_downloads}'+"""<span class="tooltiptext">Refresh Downloads</span></a> <!--Update download-list --!>
         <a href="{{ url_for('route_adminpage',req_cmd='db_write') }}" class="btn_admin_actions">"""+f'{style.aa_db_write}'+"""<span class="tooltiptext">Persist Database</span></a> <!--Persist login-database --!>
