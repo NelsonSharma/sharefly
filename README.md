@@ -16,13 +16,13 @@ Flask based web app for sharing files and quiz evaluation
     Note: the `nbconvert` package is optional - required only for the **Board** Page
 
 
-2. Install `sharefly` using **one** two options below:
-    * Globally  
+2. Install `sharefly` using any **one** of the two options below:
+    * Install from [PyPI](https://pypi.org/project/sharefly/)  
 
         ```bash
         python -m pip install sharefly
         ```
-    * Locally 
+    * Install from [GitHub](https://github.com/NelsonSharma/sharefly) 
 
         ```bash
         git clone https://github.com/NelsonSharma/sharefly.git
@@ -31,12 +31,21 @@ Flask based web app for sharing files and quiz evaluation
 
 ### Hosting a Server
 
-Start a server (from current directory)
+Start a server
 
 ```bash
 python -m sharefly
 ```
-Note: The config file `__config__.py` can be found inside the current directory
+Note: 
+* The above command will start the server on all IP-Interfaces on port `8888` by default
+* The server-side files will be stored in the current directory - this can be changed using `--dir` argument
+* The config file `__config__.py` will be created in the current directory (if not existing)
+* Access the app using a browser by going to `http://localhost:8888`
+* The default uid or username is the username in the operating system
+* The default password is not set - it must be set on the first login
+* The default user has admin privileges
+* To create more users and/or change access levels - edit the `__login__.csv` file found in the `__base__` directory
+
 
 See more options to start a server using `--help` option
 
