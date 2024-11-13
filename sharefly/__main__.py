@@ -578,13 +578,11 @@ evaluate = """
         <title> """+f'{style.icon_eval}'+""" {{ config.topic }} </title>
         <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">  
         <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
-
     </head>
     <body>
     <!-- ---------------------------------------------------------->
     </br>
     <!-- ---------------------------------------------------------->
-
     <div align="left" style="padding: 20px;">
         <div class="topic_mid">{{ config.topic }}</div>
         <div class="userword">{{session.uid}} {{ session.emojid }} {{session.named}}</div>
@@ -596,7 +594,6 @@ evaluate = """
         <a href="{{ url_for('route_storeuser') }}" class="btn_store">User-Store</a>
         <a href="{{ url_for('route_generate_submit_report') }}" target="_blank" class="btn_board">User-Report</a>
         <button class="btn_purge_large" onclick="confirm_repass()">"""+f'{style.aa_reset_pass} Reset Password' + """</button>
-        
             <script>
                 function confirm_repass() {
                 let res = prompt("Enter UID", ""); 
@@ -607,8 +604,6 @@ evaluate = """
             </script>
         </div>
         <br>
-        <br>
-
         {% if success %}
         <span class="admin_mid" style="animation-name: fader_admin_success;">✓ {{ status }} </span>
         {% else %}
@@ -628,9 +623,10 @@ evaluate = """
                 <br>
                 <br>
                 <input type="submit" class="btn_submit" value="Submit Evaluation"> 
-                <br>    
+                <br>   
+                <br> 
         </form>
-        <br>
+        
         <form method='POST' enctype='multipart/form-data'>
             {{form.hidden_tag()}}
             {{form.file()}}
@@ -644,10 +640,7 @@ evaluate = """
     {% if results %}
     <div class="status">
     <table>
-
-
     {% for (ruid,rmsg,rstatus) in results %}
-        
         {% if rstatus %}
             <tr class="btn_disablel">
         {% else %}
@@ -657,13 +650,10 @@ evaluate = """
             <td>{{ rmsg }}</td>
             </tr>
     {% endfor %}
-
     </table>
     </div>
     {% endif %}
-    
-
-            
+                
     <!-- ---------------------------------------------------------->
     </br>
     <!-- ---------------------------------------------------------->
@@ -696,13 +686,11 @@ admin = """
         <a href="{{ url_for('route_adminpage') }}" class="btn_refresh">Refresh</a>
         </div>
         <br>
-        <br>
         {% if success %}
         <span class="admin_mid" style="animation-name: fader_admin_success;">✓ {{ status }} </span>
         {% else %}
         <span class="admin_mid" style="animation-name: fader_admin_failed;">✗ {{ status }} </span>
         {% endif %}
-        <br>
         <br>
         {% if '+' in session.admind %}
         <a href="{{ url_for('route_adminpage',req_cmd='ref_downloads') }}" class="btn_admin_actions">"""+f'{style.aa_ref_downloads}'+"""<span class="tooltiptext">Refresh Downloads</span></a> <!--Update download-list --!>
@@ -871,7 +859,6 @@ downloads = """
         <a href="{{ url_for('route_home') }}" class="btn_home">Home</a>
         </div>
         <br>
-        <br>
         <div class="files_status">"""+f'{style.downloads_}'+"""</div>
         <br>
         <div class="files_list_down">
@@ -882,7 +869,6 @@ downloads = """
             {% endfor %}
             </ol>
         </div>
-        <br>
         <br>
     </div>
 
@@ -924,7 +910,6 @@ storeuser = """
         {% endif %}
         </div>
         <br>
-        <br>
         <hr>
         <!-- Breadcrumb for navigation -->
         <div class="files_status"> Path: 
@@ -965,7 +950,6 @@ storeuser = """
             </ol>
         </div>
         <br>
-        <br>
     </div>
 
     <!-- ---------------------------------------------------------->
@@ -1003,7 +987,6 @@ store = """
         {% endif %}
         {% endif %}
         </div>
-        <br>
         <br>
         <hr>
         <!-- Breadcrumb for navigation -->
@@ -1043,7 +1026,6 @@ store = """
             </ol>
         </div>
         <br>
-        <br>
     </div>
 
     <!-- ---------------------------------------------------------->
@@ -1076,7 +1058,6 @@ uploads = """
         <a href="{{ url_for('route_home') }}" class="btn_home">Home</a>
         </div>
         <br>
-        <br>
         <div class="files_status">"""+f'{style.uploads_}'+"""</div>
         <br>
         <div class="files_list_down">
@@ -1087,7 +1068,6 @@ uploads = """
             {% endfor %}
             </ol>
         </div>
-        <br>
         <br>
     </div>
 
@@ -1121,7 +1101,6 @@ reports = """
         <a href="{{ url_for('route_home') }}" class="btn_home">Home</a>
         </div>
         <br>
-        <br>
         <div class="files_status">"""+f'{style.report_}'+"""</div>
         <br>
         <div class="files_list_down">
@@ -1132,7 +1111,6 @@ reports = """
             {% endfor %}
             </ol>
         </div>
-        <br>
         <br>
     </div>
 
@@ -1186,7 +1164,6 @@ home="""
         <a href="{{ url_for('route_adminpage') }}" class="btn_admin">"""+f'{style.admin_}'+"""</a>
         {% endif %}
         </div>
-        <br>
         <br>
         {% if "U" in session.admind %}
             <div class="status">
