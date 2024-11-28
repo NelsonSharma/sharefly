@@ -136,8 +136,8 @@ def rematch(instr, pattern):  return \
     (re.match(pattern, instr))
 
 def VALIDATE_PASS(instr):     return rematch(instr, r'^[a-zA-Z0-9~!@#$%^&*()_+{}<>?`\-=\[\].]+$')
-def VALIDATE_UID(instr):      return rematch(instr, r'^[a-zA-Z0-9._@]+$')
-def VALIDATE_NAME(instr):     return rematch(instr, r'^[a-zA-Z]+(?: [a-zA-Z]+)*$')
+def VALIDATE_UID(instr):      return rematch(instr, r'^[a-zA-Z0-9._@]+$') and instr[0]!="."
+def VALIDATE_NAME(instr):     return rematch(instr, r'^[a-zA-Z0-9]+(?: [a-zA-Z0-9]+)*$')
 
 def DICT2CSV(path, d, ord):
     with open(path, 'w', encoding='utf-8') as f: 
@@ -171,19 +171,13 @@ def BUFF2DICT(b, key_at):
 def GET_SECRET_KEY(postfix):
     randx = lambda : random.randint(1111111111, 9999999999)
     r1 = randx()
-    for _ in range(datetime.datetime.now().second): _ = randx()
+    for _ in range(datetime.datetime.now().microsecond % 60): _ = randx()
     r2 = randx()
     for _ in range(datetime.datetime.now().second): _ = randx()
     r3 = randx()
-    for _ in range(datetime.datetime.now().second): _ = randx()
+    for _ in range(datetime.datetime.now().minute): _ = randx()
     r4 = randx()
     return ':{}:{}:{}:{}:{}:'.format(r1,r2,r3,r4,postfix)
-
-def CREATE_LOGIN_FILE(login_xl_path):  
-    this_user = getpass.getuser()
-    if not (VALIDATE_UID(this_user)):  this_user=DEFAULT_USER
-    DICT2CSV(login_xl_path, { f'{this_user}' : [DEFAULT_ACCESS,  f'{this_user}', f'{this_user}', f''] }, LOGIN_ORD ) # save updated login information to csv
-    return this_user
 
 def READ_DB_FROM_DISK(path, key_at):
     try:    return CSV2DICT(path, key_at), True
@@ -287,7 +281,7 @@ sprint(f'⚙ HTML Directory @ {HTMLDIR}')
 BASEDIR = ((os.path.join(WORKDIR, args.base)) if args.base else WORKDIR)
 try:     os.makedirs(BASEDIR, exist_ok=True)
 except:  fexit(f'[!] base directory  @ {BASEDIR} was not found and could not be created') 
-sprint(f'⚙ Base dicectiry: {BASEDIR}')
+sprint(f'⚙ Base Directory: {BASEDIR}')
 
 # ------------------------------------------------------------------------------------------
 # WEB-SERVER INFORMATION
@@ -316,8 +310,20 @@ if not args.login: fexit(f'[!] login file was not provided!')
 LOGIN_XL_PATH = os.path.join( BASEDIR, args.login) 
 if not os.path.isfile(LOGIN_XL_PATH): 
     sprint(f'⇒ Creating new login file: {LOGIN_XL_PATH}')
-    this_user = CREATE_LOGIN_FILE(LOGIN_XL_PATH)
-    sprint(f'⇒ Created new login with user "{this_user}" at file: {LOGIN_XL_PATH}')
+    
+    this_user = getpass.getuser()
+    if not (VALIDATE_UID(this_user)):  this_user=DEFAULT_USER
+
+    
+    try:this_name = os.uname().nodename
+    except:this_name = ""
+    if not (VALIDATE_NAME(this_name)):  this_name=this_user.upper()
+
+    DICT2CSV(LOGIN_XL_PATH, 
+             { f'{this_user}' : [DEFAULT_ACCESS,  f'{this_user}', f'{this_name}', f''] }, 
+             LOGIN_ORD ) # save updated login information to csv
+    
+    sprint(f'⇒ Created new login-db with admin-user: user-id "{this_user}" and name "{this_name}"')
 
 # ------------------------------------------------------------------------------------------
 # EVAL DATABASE - CSV
@@ -439,7 +445,7 @@ if not os.path.exists(favicon_path):
         from . import FAVICON
         FAVICON(favicon_path)
         del FAVICON
-    except ModuleNotFoundError: pass
+    except: pass
 # ------------------------------------------------------------------------------------------
 # delete pages dict after creation? #- keep the keys to "coe"
 HTML_TEMPLATES_KEYS = tuple(HTML_TEMPLATES.keys()) #{k:None for k in HTML_TEMPLATES} 
@@ -534,7 +540,11 @@ class UploadFileForm(FlaskForm): # The upload form using FlaskForm
 # ------------------------------------------------------------------------------------------
 # application setting and instance
 # ------------------------------------------------------------------------------------------
-
+LOGIN_REG_TEXT =        '👤'
+LOGIN_NEED_TEXT =       '🔒'
+LOGIN_FAIL_TEXT =       '❌'     
+LOGIN_NEW_TEXT =        '🔥'
+LOGIN_CREATE_TEXT =     '🔑'    
 #%% [APP DEFINE] @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ 
 app = Flask(
     __name__,
@@ -575,18 +585,12 @@ app.config['apac'] =    f'{parsed.access}'.strip().upper()
 # ------------------------------------------------------------------------------------------
 @app.route('/', methods =['GET', 'POST'])
 def route_login():
-    LOGIN_NEED_TEXT =       '🔒'
-    LOGIN_FAIL_TEXT =       '❌'     
-    LOGIN_NEW_TEXT =        '🔥'
-    LOGIN_CREATE_TEXT =     '🔑'    
-    #NAME, PASS = 2, 3
-    global db#, HAS_PENDING#<--- only when writing to global wariables
     if request.method == 'POST' and 'uid' in request.form and 'passwd' in request.form:
+        global db
         in_uid = f"{request.form['uid']}"
         in_passwd = f"{request.form['passwd']}"
         in_name = f'{request.form["named"]}' if 'named' in request.form else ''
-        in_emoji = f'{request.form["emojid"]}' if 'emojid' in request.form else app.config['emoji']
-        if ((not in_emoji) or (app.config['rename']<2)): in_emoji = app.config['emoji']
+        in_emoji = app.config['emoji']
         in_query = in_uid if not args.case else (in_uid.upper() if args.case>0 else in_uid.lower())
         valid_query, valid_name = VALIDATE_UID(in_query) , VALIDATE_NAME(in_name)
         if not valid_query : record=None
@@ -597,10 +601,8 @@ def route_login():
                 if in_passwd: # new password provided
                     if VALIDATE_PASS(in_passwd): # new password is valid
                         db[uid][3]=in_passwd 
-                        #HAS_PENDING+=1
                         if in_name!=named and valid_name and (app.config['rename']>0) : 
                             db[uid][2]=in_name
-                            #HAS_PENDING+=1
                             dprint(f'⇒ {uid} ◦ {named} updated name to "{in_name}" via {request.remote_addr}') 
                             named = in_name
                         else:
@@ -647,7 +649,6 @@ def route_login():
                         if in_name!=named and  valid_name and  (app.config['rename']>0): 
                             session['named'] = in_name
                             db[uid][2] = in_name
-                            #HAS_PENDING+=1
                             dprint(f'⇒ {uid} ◦ {named} updated name to "{in_name}" via {request.remote_addr}') 
                             named = in_name
                         else: 
@@ -678,18 +679,12 @@ def route_login():
 @app.route('/new', methods =['GET', 'POST'])
 def route_new():
     if not app.config['reg']: return "registration is not allowed"
-    LOGIN_NEED_TEXT =       '👤'
-    LOGIN_FAIL_TEXT =       '❌'     
-    LOGIN_NEW_TEXT =        '🔥'
-    LOGIN_CREATE_TEXT =     '🔑'    
-    #NAME, PASS = 2, 3
-    global db#, HAS_PENDING#<--- only when writing to global wariables
     if request.method == 'POST' and 'uid' in request.form and 'passwd' in request.form:
+        global db
         in_uid = f"{request.form['uid']}"
         in_passwd = f"{request.form['passwd']}"
         in_name = f'{request.form["named"]}' if 'named' in request.form else ''
-        in_emoji = f'{request.form["emojid"]}' if 'emojid' in request.form else app.config['emoji']
-        if ((not in_emoji) or (app.config['rename']<2)): in_emoji = app.config['emoji']
+        in_emoji = app.config['emoji']
         in_query = in_uid if not args.case else (in_uid.upper() if args.case>0 else in_uid.lower())
         valid_query, valid_name = VALIDATE_UID(in_query) , VALIDATE_NAME(in_name)
         if not valid_query:
@@ -726,7 +721,7 @@ def route_new():
     else:
         if session.get('has_login', False):  return redirect(url_for('route_home'))
         msg = args.register
-        warn = LOGIN_NEED_TEXT 
+        warn = LOGIN_REG_TEXT 
         
     return render_template('new.html', msg = msg,  warn = warn)
 # ------------------------------------------------------------------------------------------
@@ -1195,18 +1190,15 @@ def persist_db():
 def persist_subdb():
     r""" writes eval-db to disk """
     global dbsub
-    if write_evaldb_to_disk(dbsub, verbose=False): 
-        #dprint(f"▶ {session['uid']} ◦ {session['named']} just persisted the eval-db to disk via {request.remote_addr}")
-        STATUS, SUCCESS = "Persisted db to disk", True
+    if write_evaldb_to_disk(dbsub, verbose=False): STATUS, SUCCESS = "Persisted db to disk", True
     else: STATUS, SUCCESS =  f"Write error, file might be open", False
     return STATUS, SUCCESS 
 
 def reload_db():
     r""" reloads db from disk """
-    global db, dbsub#, HAS_PENDING
+    global db, dbsub
     db = read_logindb_from_disk()
     dbsub = read_evaldb_from_disk()
-    #HAS_PENDING=0
     dprint(f"▶ {session['uid']} ◦ {session['named']} just reloaded the db from disk via {request.remote_addr}")
     return "Reloaded db from disk", True #  STATUS, SUCCESS
 
@@ -1228,25 +1220,73 @@ def route_repassx(req_uid):
                 else: STATUS, SUCCESS =  f"Admin Access is Enabled", True
         else:  STATUS, SUCCESS =  f"Admin Access is Disabled", False
     else:
-        if app.config['repass']:
-            iseval, isadmin = ('X' in session['admind']), ('+' in session['admind'])
-            if iseval or isadmin:
-                in_uid = f'{req_uid}'
-                if in_uid: 
-                    in_query = in_uid if not args.case else (in_uid.upper() if args.case>0 else in_uid.lower())
-                    record = db.get(in_query, None)
-                    if record is not None: 
-                        admind, uid, named, _ = record
-                        if (('X' not in admind) and ('+' not in admind)) or isadmin or (session['uid']==uid):
-                            db[uid][3]='' ## 3 for PASS  record['PASS'].values[0]=''
-                            #HAS_PENDING+=1
-                            dprint(f"▶ {session['uid']} ◦ {session['named']} just reset the password for {uid} ◦ {named} via {request.remote_addr}")
-                            STATUS, SUCCESS =  f"Password was reset for {uid} {named}", True
-                        else: STATUS, SUCCESS =  f"You cannot reset password for account '{in_query}'", False
-                    else: STATUS, SUCCESS =  f"User '{in_query}' not found", False
-                else: STATUS, SUCCESS =  f"User-id was not provided", False
-            else: STATUS, SUCCESS =  "You are not allow to reset passwords", False
-        else: STATUS, SUCCESS =  "Password reset is disabled for this session", False
+        iseval, isadmin = ('X' in session['admind']), ('+' in session['admind'])
+        global db
+        if request.args:  
+            if isadmin:
+                try: 
+                    in_uid = f'{req_uid}'
+                    if in_uid: 
+                        in_query = in_uid if not args.case else (in_uid.upper() if args.case>0 else in_uid.lower())
+                        valid_query = VALIDATE_UID(in_query)
+                        if not valid_query: STATUS, SUCCESS = f'[{in_uid}] Not a valid user-id' , False
+                        else:
+                            named = request.args.get('name', "")
+                            admind = request.args.get('access', "")
+                            record = db.get(in_query, None)
+                            if record is None: 
+                                if named and admind:
+                                    valid_name = VALIDATE_NAME(named)
+                                    if not valid_name: STATUS, SUCCESS = f'[{named}] Requires a valid name' , False
+                                    else:
+                                        db[in_query] = [admind, in_query, named, '']
+                                        dprint(f"▶ {session['uid']} ◦ {session['named']} just added a new user {in_query} ◦ {named} via {request.remote_addr}")
+                                        STATUS, SUCCESS =  f"New User Created {in_query} {named}", True
+                                else: STATUS, SUCCESS = f'Missing Arguments to create new user "{in_query}": use (name) (access)' , False
+                            else:
+                                STATUS, SUCCESS =  f"Updated Nothing for {in_query}", False
+                                radmind, _, rnamed, _ = record
+                                if admind and admind!=radmind: # trying to update access
+                                    db[in_query][0] = admind
+                                    dprint(f"▶ {session['uid']} ◦ {session['named']} just updated access for {in_query} from {radmind} to {admind} via {request.remote_addr}")
+                                    STATUS, SUCCESS =  f"Updated Access for {in_query} from [{radmind}] to [{admind}]", True
+
+                                if named and named!=rnamed: # trying to rename
+                                    valid_name = VALIDATE_NAME(named)
+                                    if not valid_name: 
+                                        STATUS, SUCCESS = f'[{named}] Requires a valid name' , False
+                                    else:
+                                        db[in_query][2] = named
+                                        dprint(f"▶ {session['uid']} ◦ {session['named']} just updated name for {in_query} from {rnamed} to {named} via {request.remote_addr}")
+                                        STATUS, SUCCESS =  f"Updated Name for {in_query} from [{rnamed}] to [{named}]", True
+                                
+                                
+                                #STATUS, SUCCESS =  f"User '{in_query}' already exists", False
+
+
+                    else: STATUS, SUCCESS =  f"User-id was not provided", False
+                except: STATUS, SUCCESS = f'Invalid request args ... Hint: use (name, access)'
+            else: STATUS, SUCCESS =  f"Admin Access is Disabled", False
+        else:
+            if app.config['repass']:
+                
+                if iseval or isadmin:
+                    in_uid = f'{req_uid}'
+                    if in_uid: 
+                        in_query = in_uid if not args.case else (in_uid.upper() if args.case>0 else in_uid.lower())
+                        record = db.get(in_query, None)
+                        if record is not None: 
+                            admind, uid, named, _ = record
+                            if (('X' not in admind) and ('+' not in admind)) or isadmin or (session['uid']==uid):
+                                db[uid][3]='' ## 3 for PASS
+                                dprint(f"▶ {session['uid']} ◦ {session['named']} just reset the password for {uid} ◦ {named} via {request.remote_addr}")
+                                STATUS, SUCCESS =  f"Password was reset for {uid} {named}", True
+                            else: STATUS, SUCCESS =  f"You cannot reset password for account '{in_query}'", False
+                        else: STATUS, SUCCESS =  f"User '{in_query}' not found", False
+                    else: STATUS, SUCCESS =  f"User-id was not provided", False
+                else: STATUS, SUCCESS =  "You are not allow to reset passwords", False
+            else: STATUS, SUCCESS =  "Password reset is disabled for this session", False
+        
     return render_template('evaluate.html',  status=STATUS, success=SUCCESS, form=form, results=results)
 # ------------------------------------------------------------------------------------------
 
